@@ -639,7 +639,7 @@ document.getElementById("submitPartsOrderBtn").addEventListener("click", ()=>{
   }).catch(function(err){
     document.getElementById("submitPartsOrderBtn").disabled = false;
     alert("Error submitting parts order: " + err.message);
-  })});
+  });
 });
 
 /* ---------------- Utils ---------------- */

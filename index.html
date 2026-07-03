@@ -55,6 +55,9 @@
   .empty{color:var(--gray);font-size:13.5px;padding:16px 0;text-align:center;}
   .upload-box{border:2px dashed var(--border);border-radius:10px;padding:20px;text-align:center;margin-bottom:14px;}
   .upload-box input[type=file]{margin-top:10px;}
+  .doctype-row{display:flex;gap:8px;margin:6px 0 14px;flex-wrap:wrap;}
+  .doctype-btn{flex:1;min-width:90px;padding:10px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:13.5px;font-weight:600;color:var(--gray);cursor:pointer;}
+  .doctype-btn.active{background:var(--navy);color:#fff;border-color:var(--navy);}
   #receiptPreview{max-width:100%;max-height:260px;border-radius:8px;margin-top:12px;display:none;border:1px solid var(--border);}
   .spinner-text{font-size:13.5px;color:var(--brandBlue);font-weight:600;margin-top:10px;display:none;}
   .recent-item{display:flex;justify-content:space-between;padding:8px 4px;border-bottom:1px solid var(--lgray);font-size:13.5px;}
@@ -143,6 +146,12 @@
   <div class="card" id="reviewCard" style="display:none;">
     <h2>Review &amp; Complete</h2>
     <p style="font-size:12.5px;color:var(--gray);margin-top:-6px;">Auto-scanned fields are best guesses — please double check them before saving.</p>
+    <label style="display:block;font-size:12.5px;font-weight:600;color:#3a4657;margin-bottom:4px;">Document Type</label>
+    <div class="doctype-row" id="docTypeRow">
+      <button type="button" class="doctype-btn" data-doctype="Invoice">Invoice</button>
+      <button type="button" class="doctype-btn" data-doctype="Fuel">Fuel Receipt</button>
+      <button type="button" class="doctype-btn" data-doctype="Packing Slip">Packing Slip</button>
+    </div>
     <div class="grid">
       <div class="field">
         <label>Vendor</label>
@@ -402,6 +411,19 @@ document.getElementById("chooseReceiptBtn").addEventListener("click", ()=>{
   document.getElementById("receiptFile").click();
 });
 let processedDataUrl = null;
+let selectedDocType = "Invoice";
+function setDocType(t){
+  selectedDocType = t;
+  document.querySelectorAll("#docTypeRow .doctype-btn").forEach(b=>{
+    b.classList.toggle("active", b.dataset.doctype === t);
+  });
+  // Fuel & Packing Slip don't need invoice #/PO/due date as strictly
+  const inv = (t === "Invoice");
+  document.getElementById("rDueDate").closest(".field").style.opacity = inv ? "1" : "0.55";
+}
+document.querySelectorAll("#docTypeRow .doctype-btn").forEach(b=>{
+  b.addEventListener("click", ()=> setDocType(b.dataset.doctype));
+});
 document.getElementById("receiptFile").addEventListener("change", (e)=>{
   const file = e.target.files[0];
   if(!file) return;
@@ -512,6 +534,7 @@ function openReviewForm(guess){
   document.getElementById("rWorkOrder").value = "";
   document.getElementById("rPaymentMethod").value = "Charge Account";
   document.getElementById("rSubmittedBy").value = localStorage.getItem(LS_SUBMITTED_BY) || "";
+  setDocType(guess.docType || "Invoice");
   document.getElementById("reviewCard").style.display = "";
   document.getElementById("reviewCard").scrollIntoView({behavior:"smooth"});
 }
@@ -549,10 +572,11 @@ document.getElementById("saveReceiptBtn").addEventListener("click", ()=>{
 
   if(!vendor){ alert("Please enter the vendor name."); return; }
   if(!submittedBy){ alert("Please enter your name in Submitted By."); return; }
-  if(!workOrder){ alert("Please enter the work order this receipt belongs to."); return; }
-  if(!dueDate){ alert("Please enter a due date so this can be tracked."); return; }
+  if(!workOrder){ alert("Please enter the work order this belongs to."); return; }
+  if(selectedDocType === "Invoice" && !dueDate){ alert("Please enter a due date so this invoice can be tracked."); return; }
 
   const payload = {
+    docType: selectedDocType,
     vendor, invoiceNumber, invoiceDate, poNumber, amount, dueDate,
     workOrder, paymentMethod, submittedBy,
     driveFileUrl: currentScan.driveFileUrl || ""

@@ -224,7 +224,7 @@ function emailOrder(){
 }
 function sendOrder(order){
  toast('Sending order...');
- fetch('https://script.google.com/macros/s/AKfycbyay3_3D0PpBt1AR-pPaKGJ3daATc8PMU5Buj2J6VCJWkA7GUtqWvmYIwaVEsrf37DSIA/exec',{method:'POST',mode:'no-cors',body:JSON.stringify(order)}).then(function(){toast('Order emailed to Mike & Stew');}).catch(function(){toast('Send failed - use Copy and email manually');});
+ fetch('https://script.google.com/macros/s/AKfycbyay3_3D0PpBt1AR-pPaKGJ3daATc8PMU5Buj2J6VCJWkA7GUtqWvmYIwaVEsrf37DSIA/exec',{method:'POST',body:JSON.stringify(order)}).then(function(r){return r.json();}).then(function(j){toast(j&&j.ok?'Order emailed to Mike & Stew':'Sent, but server issue - check email');}).catch(function(){toast('Send failed - use Copy and email manually');});
 }
 function copyOrder(){const L=orderLines(); if(!L.length){toast('Add some parts first');return;} copyTxt(orderText(),'Order text copied');}
 function copyTxt(t,msg){

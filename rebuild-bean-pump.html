@@ -222,7 +222,10 @@ function emailOrder(){
  const rows=L.map(function(o){return [String(o.q), o.desc, (o.ep||''), (o.epp!==''&&o.epp!=null?String(o.epp):''), ((o.fmc&&o.fmc!=='N/A'&&o.fmc!=='SOURCE')?o.fmc:''), (o.bkp!==''&&o.bkp!=null?String(o.bkp):'')];});
  sendOrder({unit:'Bean Pump (DM45/HP Water Pump 8 GPM, BOM 50822147)', subject:'Bean Pump Rebuild Parts Order - DM45/HP (BOM 50822147)', headers:headers, rows:rows});
 }
-func
+function sendOrder(order){
+ toast('Sending order...');
+ fetch('https://script.google.com/macros/s/AKfycbyay3_3D0PpBt1AR-pPaKGJ3daATc8PMU5Buj2J6VCJWkA7GUtqWvmYIwaVEsrf37DSIA/exec',{method:'POST',mode:'no-cors',body:JSON.stringify(order)}).then(function(){toast('Order emailed to Mike & Stew');}).catch(function(){toast('Send failed - use Copy and email manually');});
+}
 function copyOrder(){const L=orderLines(); if(!L.length){toast('Add some parts first');return;} copyTxt(orderText(),'Order text copied');}
 function copyTxt(t,msg){
  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(()=>toast(msg||('Copied '+t)),()=>fallbackCopy(t,msg));}

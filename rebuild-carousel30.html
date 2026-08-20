@@ -129,7 +129,10 @@ function emailOrder(){ if(!anyOn()){toast('Add some parts first');return;}
  var rows=[];
  parts.forEach(function(p,i){ if(st[i].on){ rows.push([refFor(i), String(st[i].qty), p.pn, p.desc+(p.holder?' (HOLDER ONLY)':'')]); }});
  sendOrder({unit:'30ft Carousel (Complete Changer/Holder 2657594665)', wo:document.getElementById('wo').value||'', date:document.getElementById('dt').value||'', serial:document.getElementById('sn').value||'', subject:'30ft Carousel Parts Order - Complete Changer/Holder (2657594665)', headers:headers, rows:rows}); }
-func
+function sendOrder(order){
+ toast('Sending order...');
+ fetch('https://script.google.com/macros/s/AKfycbyay3_3D0PpBt1AR-pPaKGJ3daATc8PMU5Buj2J6VCJWkA7GUtqWvmYIwaVEsrf37DSIA/exec',{method:'POST',mode:'no-cors',body:JSON.stringify(order)}).then(function(){toast('Order emailed to Mike & Stew');}).catch(function(){toast('Send failed - use Copy and email manually');});
+}
 function copyOrder(){if(!anyOn()){toast('Add some parts first');return;} copyTxt(orderText(),'Order text copied');}
 function copyTxt(t,msg){ if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(()=>toast(msg||('Copied '+t)),()=>fb(t,msg));} else fb(t,msg); }
 function fb(t,msg){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');toast(msg||('Copied '+t));}catch(e){toast('Copy failed');}document.body.removeChild(ta);}

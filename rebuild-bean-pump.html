@@ -218,10 +218,11 @@ function orderText(){
 }
 function emailOrder(){
  const L=orderLines(); if(!L.length){toast('Add some parts first');return;}
- const subj='Bean Pump Rebuild Parts Order - DM45/HP (BOM 50822147)';
- const body=orderText();
- window.location.href='mailto:mike@brokenspokedrilling.com,stew@brokenspokedrilling.com?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(body);
+ const headers=['Qty','Description','Epiroc #','Epiroc Unit $','Buckhorn/FMC #','Buckhorn Unit $'];
+ const rows=L.map(function(o){return [String(o.q), o.desc, (o.ep||''), (o.epp!==''&&o.epp!=null?String(o.epp):''), ((o.fmc&&o.fmc!=='N/A'&&o.fmc!=='SOURCE')?o.fmc:''), (o.bkp!==''&&o.bkp!=null?String(o.bkp):'')];});
+ sendOrder({unit:'Bean Pump (DM45/HP Water Pump 8 GPM, BOM 50822147)', subject:'Bean Pump Rebuild Parts Order - DM45/HP (BOM 50822147)', headers:headers, rows:rows});
 }
+func
 function copyOrder(){const L=orderLines(); if(!L.length){toast('Add some parts first');return;} copyTxt(orderText(),'Order text copied');}
 function copyTxt(t,msg){
  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(()=>toast(msg||('Copied '+t)),()=>fallbackCopy(t,msg));}

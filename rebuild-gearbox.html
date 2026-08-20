@@ -144,7 +144,7 @@ function emailOrder(){ if(!anyOn()){toast('Add some parts first');return;}
  sendOrder({unit:'Carousel Gearbox (DML/45, 2657572984)', wo:document.getElementById('wo').value||'', date:document.getElementById('dt').value||'', serial:document.getElementById('sn').value||'', subject:'Carousel Gearbox Parts Order - DML/45 (2657572984)', headers:headers, rows:rows}); }
 function sendOrder(order){
  toast('Sending order...');
- fetch('https://script.google.com/macros/s/AKfycbyay3_3D0PpBt1AR-pPaKGJ3daATc8PMU5Buj2J6VCJWkA7GUtqWvmYIwaVEsrf37DSIA/exec',{method:'POST',mode:'no-cors',body:JSON.stringify(order)}).then(function(){toast('Order emailed to Mike & Stew');}).catch(function(){toast('Send failed - use Copy and email manually');});
+ fetch('https://script.google.com/macros/s/AKfycbyay3_3D0PpBt1AR-pPaKGJ3daATc8PMU5Buj2J6VCJWkA7GUtqWvmYIwaVEsrf37DSIA/exec',{method:'POST',body:JSON.stringify(order)}).then(function(r){return r.json();}).then(function(j){toast(j&&j.ok?'Order emailed to Mike & Stew':'Sent, but server issue - check email');}).catch(function(){toast('Send failed - use Copy and email manually');});
 }
 function copyOrder(){if(!anyOn()){toast('Add some parts first');return;} copyTxt(orderText(),'Order text copied');}
 function copyTxt(t,msg){ if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(()=>toast(msg||('Copied '+t)),()=>fb(t,msg));} else fb(t,msg); }

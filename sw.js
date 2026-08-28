@@ -1,7 +1,8 @@
 // BSDS JSA offline shell — caches the app so it opens with zero signal.
 // Data sync is handled by the app itself (records queue locally until online).
-const CACHE = 'bsds-tools-v1';
-const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
+const CACHE = 'bsds-tools-v2';
+const ASSETS = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png',
+  './training-cert.html', './pdf-lib.min.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

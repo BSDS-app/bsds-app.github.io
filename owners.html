@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BSDS Command Center</title>
+<meta name="theme-color" content="#12233c">
+<style>
+body{margin:0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#f5f6f8;color:#1b2430;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:20px;box-sizing:border-box}
+.card{background:#fff;border:1px solid #d7dce3;border-radius:12px;padding:24px;max-width:420px;text-align:center}
+h1{font-size:18px;color:#12233c;margin:0 0 8px}
+p{font-size:14px;color:#5b6674}
+a.btn{display:inline-block;background:#e8641c;color:#fff;text-decoration:none;padding:12px 18px;border-radius:8px;font-weight:700;margin-top:8px}
+a.back{display:block;margin-top:14px;color:#1e4d8c;font-size:13px}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>Owners &mdash; Command Center</h1>
+<p id="msg">Opening&hellip;</p>
+<a class="btn" id="go" style="display:none">Open Command Center</a>
+<a class="back" href="index.html">&lsaquo; Back to Launcher</a>
+</div>
+<script>
+// Paste the Apps Script web app URL (ends in /exec) between the quotes:
+var COMMAND_CENTER_URL = "";
+
+if (COMMAND_CENTER_URL) {
+  document.getElementById('go').href = COMMAND_CENTER_URL;
+  document.getElementById('go').style.display = 'inline-block';
+  document.getElementById('msg').textContent = 'Owners only. Sign in with your Broken Spoke Google account.';
+  window.location.href = COMMAND_CENTER_URL;
+} else {
+  document.getElementById('msg').textContent = 'The Command Center has not been switched on yet.';
+}
+</script>
+</body>
+</html>

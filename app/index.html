@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Broken Spoke App</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="demo" id="demobar" hidden>Preview &mdash; no accounts, nothing saved</div>
+
+<div class="top">
+  <button class="back" id="back" hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"
+         stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+    Back
+  </button>
+  <div class="ttl" id="ttl">Broken Spoke</div>
+  <div class="who" id="who" hidden>
+    <span class="pill" id="rolepill">&nbsp;</span>
+    <button class="out" id="signout">Out</button>
+  </div>
+</div>
+
+<div id="view"></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

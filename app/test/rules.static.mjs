@@ -31,8 +31,8 @@ function allows(body, verb) {
     .map(m => m[2].replace(/\s+/g, ' ').trim());
 }
 
-const COLLECTIONS = ['users', 'customers', 'equipment', 'preops', 'jsas', 'receipts',
-                     'partsRequests', 'partsOrders', 'reports', 'hr', 'books'];
+const COLLECTIONS = ['users', 'invites', 'customers', 'equipment', 'preops', 'jsas',
+                     'receipts', 'partsRequests', 'partsOrders', 'reports', 'hr', 'books'];
 
 ok(/rules_version\s*=\s*'2'/.test(src), 'the rules declare version 2');
 ok(/match \/\{document=\*\*\} \{\s*allow read, write: if false;/.test(src),
@@ -96,11 +96,43 @@ ok(/allow delete: if isOwner\(\);/.test((block('jsas') || '').replace(/\s+/g, ' 
   'only an owner deletes a JSA by hand');
 
 /* ---- nobody promotes themselves -------------------------------------- */
+/* The pinning lives in a named function now, so check the function says
+   what it must AND that the self branch of the update rule uses it. */
+ok(/function unchangedRoleAndActive\(\)[\s\S]{0,200}request\.resource\.data\.role == resource\.data\.role/
+  .test(src), 'the pin covers role');
+ok(/function unchangedRoleAndActive\(\)[\s\S]{0,200}request\.resource\.data\.active == resource\.data\.active/
+  .test(src), 'the pin covers the active flag');
 const userUpdate = allows(block('users'), 'update').join(' | ');
-ok(/request\.resource\.data\.role == resource\.data\.role/.test(userUpdate),
-  'a person cannot change their own role', userUpdate);
-ok(/request\.resource\.data\.active == resource\.data\.active/.test(userUpdate),
-  'a person cannot switch themselves back on', userUpdate);
+ok(/uid == request\.auth\.uid && unchangedRoleAndActive\(\)/.test(userUpdate),
+  'editing your own record cannot change your role or switch you back on', userUpdate);
+
+/* ---- and an owner cannot lock themselves out --------------------------
+   The one account an owner may not change is their own. Without this an
+   owner can, in two clicks, leave the company with no way into its own
+   app - and the fix for that is a console session nobody wants to need. */
+['update', 'create', 'delete'].forEach(verb => {
+  const r = allows(block('users'), verb).join(' | ');
+  ok(/isOwner\(\) && uid != request\.auth\.uid/.test(r),
+    `an owner cannot ${verb} their own record`, r);
+});
+
+/* ---- invitations are how somebody gets added -------------------------- */
+const invites = (block('invites') || '').replace(/\s+/g, ' ');
+ok(invites.length > 0, 'there is a rule block for invites');
+ok(/allow read, write: if isOwner\(\);/.test(invites),
+  'only an owner writes an invitation', invites);
+ok(/email == request\.auth\.token\.email\.lower\(\)/.test(invites),
+  'the invited person reaches only the invitation bearing their own address', invites);
+ok(!/staff\(\)|isOffice\(\)|isTech\(\)/.test(invites),
+  'nobody else can read who is being hired', invites);
+
+const userCreate = allows(block('users'), 'create').join(' | ');
+ok(/request\.resource\.data\.role == invitedAs\(\)\.role/.test(userCreate),
+  'a person admits themselves only at the role the invitation names', userCreate);
+ok(/request\.resource\.data\.active == true/.test(userCreate),
+  'and only as an active account, never pre-switched-off', userCreate);
+ok(/function invitedAs\(\)[\s\S]{0,200}invites\/\$\(request\.auth\.token\.email\.lower\(\)\)/
+  .test(src), 'the invitation is looked up by the signed-in address, not one supplied by the client');
 
 /* ---- a switched-off account is dead ----------------------------------- */
 ok(/function active\(\)[\s\S]{0,120}active == true/.test(src),
@@ -121,6 +153,40 @@ Object.entries(GRANTS).forEach(([role, caps]) => {
   const dupes = caps.filter((c, i) => caps.indexOf(c) !== i);
   ok(dupes.length === 0, `${role} has no duplicated capabilities`, String(dupes));
 });
+
+/* ---- every query the app makes has an index to run on -----------------
+   A tech's "my own paperwork" screen filters by uid AND sorts by date.
+   Firestore refuses that pair without a composite index, and the refusal
+   arrives as an error - which on screen looks exactly like "you have not
+   filed any", i.e. like success. So the index file is checked against the
+   queries rather than trusted. */
+const idx = JSON.parse(fs.readFileSync(new URL('../firestore.indexes.json',
+  import.meta.url), 'utf8'));
+[['preops', 'inspDate', '../preop.js'], ['jsas', 'jsaDate', '../jsa.js']]
+  .forEach(([coll, dateField, src]) => {
+    const code = fs.readFileSync(new URL(src, import.meta.url), 'utf8');
+    const filters = /m\.where\('uid', '==', u\.uid\)/.test(code);
+    const sorts = new RegExp("m\\.orderBy\\('" + dateField + "'").test(code);
+    ok(filters && sorts, `${coll}: the log really does filter by uid and sort by date`,
+      `filter=${filters} sort=${sorts}`);
+    const hit = (idx.indexes || []).find(i => i.collectionGroup === coll
+      && i.fields.length === 2
+      && i.fields[0].fieldPath === 'uid' && i.fields[0].order === 'ASCENDING'
+      && i.fields[1].fieldPath === dateField && i.fields[1].order === 'DESCENDING');
+    ok(!!hit, `${coll}: there is a (uid, ${dateField} desc) composite index`,
+      JSON.stringify((idx.indexes || []).map(i => i.collectionGroup)));
+  });
+
+/* the CLI needs to know which project and where the files are */
+const fbj = JSON.parse(fs.readFileSync(new URL('../firebase.json', import.meta.url), 'utf8'));
+ok(fbj.firestore && fbj.firestore.rules === 'firestore.rules',
+  'firebase.json points at the rules file in this folder');
+ok(fbj.firestore && fbj.firestore.indexes === 'firestore.indexes.json',
+  'firebase.json points at the index file in this folder');
+const rc = JSON.parse(fs.readFileSync(new URL('../.firebaserc', import.meta.url), 'utf8'));
+ok(rc.projects && rc.projects.default === 'bsds-app',
+  'the default project is bsds-app, so a deploy cannot go to the wrong one',
+  JSON.stringify(rc.projects));
 
 /* ---- the Firebase project is actually wired up ------------------------ */
 const cfg = fs.readFileSync(new URL('../config.js', import.meta.url), 'utf8');

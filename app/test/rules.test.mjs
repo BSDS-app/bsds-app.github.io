@@ -68,6 +68,11 @@ await env.withSecurityRulesDisabled(async (c) => {
   await setDoc(doc(d, 'reports/rep1'), { kind: 'ar-aging' });
   await setDoc(doc(d, 'hr/clint'), { ssnOnFile: true });
   await setDoc(doc(d, 'books/70165'), { title: 'DM45-HP 70165' });
+  /* an invitation waiting to be claimed, and one for somebody else */
+  await setDoc(doc(d, 'invites/dale@bsds.local'),
+    { name: 'Dale', email: 'dale@bsds.local', role: 'tech', by: 'Mike' });
+  await setDoc(doc(d, 'invites/pat@bsds.local'),
+    { name: 'Pat', email: 'pat@bsds.local', role: 'office', by: 'Mike' });
 });
 
 const as = uid => env.authenticatedContext(uid).firestore();
@@ -251,6 +256,76 @@ await ok('an owner sets roles', async () => {
     { role: 'office', active: true, name: 'Clint W' }));
   await env.withSecurityRulesDisabled(async (c) =>
     setDoc(doc(c.firestore(), 'users/clint'), USERS.clint));
+});
+
+/* ---- an owner cannot lock themselves out -------------------------------
+   The screen hides the controls; this is the half that counts. Mike can
+   demote Stew and Stew can demote Mike, but neither can do it to himself,
+   so no sequence of clicks ends with nobody able to get in. */
+await ok('an owner cannot change their own role', async () => {
+  await assertFails(setDoc(doc(as('mike'), 'users/mike'),
+    { role: 'tech', active: true, name: 'Mike' }));
+});
+await ok('an owner cannot switch themselves off', async () => {
+  await assertFails(setDoc(doc(as('mike'), 'users/mike'),
+    { role: 'owner', active: false, name: 'Mike' }));
+});
+await ok('an owner cannot delete their own record', async () => {
+  await assertFails(deleteDoc(doc(as('mike'), 'users/mike')));
+});
+await ok('but another owner can', async () => {
+  await assertSucceeds(setDoc(doc(as('stew'), 'users/mike'),
+    { role: 'owner', active: true, name: 'Mike Clunas' }));
+});
+await ok('an owner can still fix their own name', async () => {
+  await assertSucceeds(setDoc(doc(as('mike'), 'users/mike'),
+    { role: 'owner', active: true, name: 'Mike C' }));
+  await env.withSecurityRulesDisabled(async (c) =>
+    setDoc(doc(c.firestore(), 'users/mike'), USERS.mike));
+});
+
+/* ---- invitations ------------------------------------------------------
+   How somebody gets added without a console session. The invitation is
+   the admitting act; setting a password is not. */
+const asEmail = (uid, email) =>
+  env.authenticatedContext(uid, { email, email_verified: true }).firestore();
+
+await ok('nobody but an owner can read who is being hired', async () => {
+  await assertFails(getDocs(collection(as('clint'), 'invites')));
+  await assertFails(getDocs(collection(as('jaz'), 'invites')));
+  await assertFails(getDoc(doc(as('clint'), 'invites/dale@bsds.local')));
+  await assertSucceeds(getDocs(collection(as('mike'), 'invites')));
+});
+await ok('office cannot invite anybody', async () => {
+  await assertFails(setDoc(doc(as('jaz'), 'invites/x@bsds.local'),
+    { name: 'X', email: 'x@bsds.local', role: 'owner' }));
+});
+await ok('an invited person reads only their own invitation', async () => {
+  const dale = asEmail('dale', 'dale@bsds.local');
+  await assertSucceeds(getDoc(doc(dale, 'invites/dale@bsds.local')));
+  await assertFails(getDoc(doc(dale, 'invites/pat@bsds.local')));
+});
+await ok('an invited person admits themselves at the invited role', async () => {
+  const dale = asEmail('dale', 'dale@bsds.local');
+  await assertSucceeds(setDoc(doc(dale, 'users/dale'),
+    { name: 'Dale', role: 'tech', active: true, email: 'dale@bsds.local' }));
+  await assertSucceeds(deleteDoc(doc(dale, 'invites/dale@bsds.local')));
+});
+await ok('and cannot help themselves to a bigger one', async () => {
+  const pat = asEmail('pat', 'pat@bsds.local');
+  await assertFails(setDoc(doc(pat, 'users/pat'),
+    { name: 'Pat', role: 'owner', active: true, email: 'pat@bsds.local' }));
+});
+await ok('somebody with no invitation admits nobody', async () => {
+  const rando = asEmail('rando', 'rando@elsewhere.com');
+  await assertFails(setDoc(doc(rando, 'users/rando'),
+    { name: 'Rando', role: 'tech', active: true, email: 'rando@elsewhere.com' }));
+  await assertFails(getDoc(doc(rando, 'equipment/wesco-ut--70165')));
+});
+await ok('and cannot write a record for somebody else', async () => {
+  const pat = asEmail('pat', 'pat@bsds.local');
+  await assertFails(setDoc(doc(pat, 'users/clint'),
+    { name: 'Clint', role: 'owner', active: true }));
 });
 
 /* ---- switched off, never admitted, and not signed in at all ------------ */

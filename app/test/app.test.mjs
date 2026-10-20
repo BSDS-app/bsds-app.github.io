@@ -270,8 +270,13 @@ for (const size of [{ width: 390, height: 800 }, { width: 1200, height: 900 }]) 
   ok(nav.includes('Machines') && nav.includes('Parts books'), `${tag} owner: everything else`);
   ok((await tileTitles()).includes('Command Center'), `${tag} owner: Command Center`);
   await page.locator('[data-go="people"]').click();
-  await page.waitForTimeout(300);
-  ok(await page.locator('.row').count() === 5, `${tag} the people list is there`);
+  await page.waitForTimeout(700);
+  // People is its own screen now - test/people.test.mjs works it properly.
+  // What belongs here is only that an owner reaches it and sees real rows.
+  ok(await page.locator('.prow').count() === 5, `${tag} the people list is there`,
+    String(await page.locator('.prow').count()));
+  ok(await page.locator('#invadd').count() === 1,
+    `${tag} and an owner can add somebody from it`);
 
   // --- signing out --------------------------------------------------
   await page.locator('#signout').click();

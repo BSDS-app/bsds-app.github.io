@@ -219,6 +219,26 @@ service cloud.firestore {
       allow delete: if isOwner();
     }
 
+    /* ---- push tokens -------------------------------------------------
+       One document per device, named by the token itself, so a phone and a
+       desk machine are two rows and both get rung.
+
+       A person writes and deletes only their OWN rows, and reads only
+       their own. Nobody reads anybody else's, owners included: a token is
+       the address of a particular phone, and a list of who is carrying
+       what is not something this app needs to be able to produce.
+
+       The Cloud Function that does the sending runs on the admin SDK,
+       which is not subject to these rules - that is how it can resolve the
+       audience and still leave this block shut to every client. It also
+       prunes a row when the push service says the token is dead, which is
+       why nothing here has to worry about old phones piling up. */
+    match /fcmTokens/{token} {
+      allow create, update: if signedIn()
+                            && request.resource.data.uid == request.auth.uid;
+      allow read, delete:   if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
     /* ---- shop reports ------------------------------------------------ */
     match /reports/{id} {
       allow read:  if isOwner() || isOffice();

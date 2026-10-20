@@ -53,13 +53,15 @@ button is not security — anybody can open the browser console.
 | `parts.js` | parts requests, orders, and receiving |
 | `workorders.js` | work order requests, and the service order number coming back |
 | `alerts.js` | the band on the home screen: what is waiting on whoever just opened it |
+| `push.js`, `sw.js` | the half that reaches a phone when nobody has opened the app |
+| `functions/index.js` | the sender. Two pushes, and the reason there are only two |
 | `icons.js` | the line icons on the tiles |
 | `manifest.json` | what Add to Home Screen uses: the name, the logo, the navy |
 | `forms/preop.v1.json` | the checklist itself — 7 equipment types, 179 lines, lifted verbatim off the old app |
 | `forms/jsa.v1.json` | the JSA — 12 MSHA hazard categories, 3 conditional permits, 79 answerable items |
 | `forms/build_*.py` | how those files were built, and the count gates that prove no line went missing |
 | `seed/` | 15 customers and 77 rigs from the Fullbay export |
-| `test/` | 160 shell, 259 Pre-Op, 164 JSA, 88 Parts, 73 Fleet, 48 People, 34 Alerts, 74 Work Order, 120 rule, 207 emulator checks |
+| `test/` | 176 shell, 259 Pre-Op, 164 JSA, 88 Parts, 73 Fleet, 48 People, 34 Alerts, 74 Work Order, 66 Push, 126 rule, 227 emulator checks |
 
 Until `config.js` has a Firebase key the app runs in **demo mode**: a person
 picker instead of a sign-in form, no network, nothing written. The screens are
@@ -252,25 +254,59 @@ means the Blaze plan — see below. What that would send is exactly what
 `alerts.gather()` already returns, so switching it on is a sender, not a
 rewrite.
 
-### Notifications on a phone, when you want them
+### Notifications on a phone
 
-Three things are needed, and none of them are code that exists yet:
+**Two things buzz. Everything else sits and waits for you.** That was the
+instruction and it is the whole design:
 
-1. **Blaze.** A phone cannot push to another phone; something server-side
-   has to send it. One Cloud Function, triggered when a parts request is
-   written with `urgency: 'down'`. The free allowance is about two million
-   runs a month against a few dozen a day, so the cost is nothing — but the
-   plan has to be on, and a budget alert set the same day.
-2. **A service worker and a web app manifest**, plus a `fcmTokens`
-   collection so each person's device can be reached, with a rule that a
-   person may only write their own.
-3. **On iPhones, Add to Home Screen.** Web push does not fire in a Safari
-   tab — iOS 16.4 or newer, installed to the Home Screen, no workaround.
-   Android works from the browser.
+| | Rings | |
+|---|---|---|
+| A rig down waiting on parts | Mike and Stew | A rig not drilling is costing money this hour |
+| A work order rung in | the owners and the office | Somebody has to build it in Fullbay |
 
-Scope it to **down rigs only**. Everything else sits in the band on purpose:
-a phone that buzzes for every pre-op gets muted inside a week, and then the
-one that mattered is muted too.
+Parts to order, defects to sign off, a service order number coming back, a
+machine with no serial — none of those buzz. They are on the band when you
+open the app. A notification that arrives most days gets swiped away unread
+by Friday, and the one that mattered goes with it.
+
+**Each device is its own switch.** Turning it on on your phone does not turn
+it on on your laptop. The Notifications screen lists the devices currently
+being rung, so a phone in a drawer can be switched off.
+
+**On an iPhone it only works once the app is on the home screen.** Share →
+Add to Home Screen, open it from there, then turn notifications on. In a
+Safari tab there is nothing to turn on — that is Apple's rule and there is
+no way round it. The app detects that case and says so rather than showing a
+button that cannot work.
+
+**Tapping one lands you on the thing it told you about** — the parts queue or
+the work order list — not on the home screen to go and find it.
+
+Three things worth knowing about how it is built:
+
+- `sw.js` carries a **second copy** of the Firebase project config, because a
+  service worker cannot import a module. `test/push.test.mjs` compares every
+  value against `config.js` and fails if they ever drift.
+- The **audience is read, not copied.** The sender looks the roles up in the
+  database at the moment it sends, so a role changed a minute ago is already
+  in force. Stamping the role onto the token row would be cheaper and would
+  go stale on the day it mattered.
+- **A failed push never undoes the write.** The request is saved first; the
+  buzz is best-effort. Losing the record would be a real problem, losing the
+  buzz is an inconvenience.
+
+Nobody can read anybody else's push tokens — not office, not an owner. A
+list of who is carrying which phone is not something this app needs to be
+able to produce.
+
+### Budget alert
+
+Blaze is metered. The notification side runs a couple of dozen function
+invocations a day against a free allowance of about two million a month, so
+the real bill is nothing — but "nothing" is a statement about today's usage,
+not a guarantee. Set a budget alert in the Google Cloud billing console the
+same week you turn Blaze on, and treat any month that trips it as a bug to
+go and find rather than an invoice to pay.
 
 ---
 
@@ -452,6 +488,7 @@ node test/fleet.test.mjs      # machines and customers, and every way of getting
 node test/parts.test.mjs      # request to order to received, and the line with no part number
 node test/alerts.test.mjs     # the home band, including that a quiet shop shows nothing
 node test/workorders.test.mjs # a tech rings one in, the office builds it, the number comes back
+node test/push.test.mjs       # the two notifications, and the files that have to agree about them
 node test/rules.static.mjs    # roles.js and firestore.rules still agree
 ```
 

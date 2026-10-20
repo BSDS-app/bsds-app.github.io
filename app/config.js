@@ -56,6 +56,24 @@ export const CONFIG = {
    * the version they were signed on and render with that, which is the whole
    * point of versioning them: a 2026 record must not come back with rows
    * added in 2027. */
+  /* Web push. The VAPID key is the public half of the key pair generated in
+   * the Firebase console on 20 Oct 2026 (Project settings → Cloud
+   * Messaging → Web Push certificates). Public by design - it identifies
+   * the project to the push service and grants nothing. The private half
+   * never leaves Google.
+   *
+   * `audience` is written here only so the app can SAY who gets what. The
+   * sending itself is decided by the Cloud Function, which reads the roles
+   * out of the database when it fires; this is a label, not a permission.
+   */
+  push: {
+    vapidKey: 'BJkSMxw57dCMLNBcFHtv55wY87uyIbFWLO_zlD8PhIsa-EyNNAiemwvWVSr7hliYAsmhcgjwq-KHGjUYM2rPuZw',
+    audience: {
+      down: 'Mike and Stew',
+      wo:   'the office and the owners',
+    },
+  },
+
   retention: {
     preop: { days: 395, label: '13 months', formVersion: 1 },
     jsa:   { days: 395, label: '13 months', formVersion: 1 },

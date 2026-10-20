@@ -10,6 +10,7 @@ import * as auth from './auth.js';
 import * as preop from './preop.js';
 import * as jsa from './jsa.js';
 import * as team from './people.js';
+import * as push from './push.js';
 import * as fleet from './fleet.js';
 import * as parts from './parts.js';
 import * as alerts from './alerts.js';
@@ -230,6 +231,11 @@ function home() {
   }
   if (auth.allow('users.manage')) {
     nav.push(['people', 'People', 'Who can see what']);
+  }
+  /* Only offered to somebody the sender will actually send to. A switch
+     that turns on nothing is worse than no switch. */
+  if (push.willGet().length) {
+    nav.push(['notify', 'Notifications', pushSub()]);
   }
   nav.push(['perms', 'What my role can see', ROLES[u.role].note]);
 
@@ -558,6 +564,76 @@ async function jsaRecord(id) {
   }
 }
 
+/* ---------- notifications ---------------------------------------------- */
+/* The band in alerts.js tells you what is waiting WHEN YOU OPEN THE APP.
+   This is the half that reaches you when you have not. Two events only -
+   a rig down, and a work order rung in - because Mike said the rest should
+   sit and wait for him, and a notification that fires every day is one
+   nobody reads by Friday. */
+function pushSub() {
+  if (!push.supported()) return 'This browser cannot do them';
+  if (push.iosNeedsInstall()) return 'Needs the app on your home screen first';
+  const p = push.permission();
+  if (p === 'granted') return push.tokenOnFile() ? 'On, on this device' : 'Allowed — not on yet';
+  if (p === 'denied') return 'Blocked in your phone settings';
+  return 'Off — a rig down would wait for you to look';
+}
+
+async function notify() {
+  chrome('Notifications', 'What reaches your phone');
+  const gets = push.willGet();
+  const h = ['<div class="wrap">'];
+
+  h.push('<div class="panel"><h2 class="sec">What gets sent</h2><ul class="plain">');
+  gets.forEach(g => h.push('<li>', esc(g), '</li>'));
+  h.push('</ul><p class="hint">Everything else — parts to order, defects to ',
+    'sign off, a service order number coming back — stays on your home ',
+    'screen and waits for you. That was deliberate.</p></div>');
+
+  if (!push.supported()) {
+    h.push('<div class="note warn"><b>This browser cannot do notifications.</b> ',
+      'Nothing here will work until you open the app in a newer one.</div>');
+  } else if (push.iosNeedsInstall()) {
+    h.push('<div class="note warn"><b>Add the app to your home screen first.</b> ',
+      'On an iPhone, notifications only reach an app that has been installed ',
+      '— in Safari, tap Share, then <b>Add to Home Screen</b>, then open it ',
+      'from there and come back here. In a browser tab there is nothing to ',
+      'turn on. That is Apple\u2019s rule, not ours, and there is no way round it.',
+      '</div>');
+  } else if (push.permission() === 'denied') {
+    h.push('<div class="note warn"><b>Your phone is blocking them.</b> ',
+      'That switch is in the phone\u2019s own settings for this app, not in ',
+      'here — nothing on this screen can change it back.</div>');
+  } else {
+    const on = push.permission() === 'granted' && !!push.tokenOnFile();
+    h.push('<div class="panel">',
+      on
+        ? '<p class="msg good">On for this device.</p>'
+        : '<p class="hint">Turning this on asks the phone for permission, then '
+          + 'registers this one device. Doing it on your phone does not do it '
+          + 'on your laptop — each one is its own switch.</p>',
+      '<p class="msg" id="pmsg"></p>',
+      on
+        ? '<button type="button" class="mini" id="poff">Turn them off on this device</button>'
+        : '<button type="button" class="btn primary" id="pon">Turn them on</button>',
+      '</div>');
+  }
+
+  h.push('<div id="pdev"></div></div>');
+  $('view').innerHTML = h.join('');
+
+  /* Which devices are already on, so somebody can see that the old phone
+     in a drawer is still being rung and switch it off. */
+  const devs = await push.mine();
+  if (devs.length) {
+    const rows = devs.map(d => '<div class="row flat"><span><span class="nm">'
+      + esc(d.label || 'A device') + '</span><span class="sub">added '
+      + esc(String(d.at || '').slice(0, 10)) + '</span></span></div>').join('');
+    $('pdev').innerHTML = '<h2 class="sec">Devices being rung</h2><div class="list">'
+      + rows + '</div>';
+  }
+}
+
 /* ---------- work orders ------------------------------------------------ */
 /* Owners and office read the roster; a tech does not. It is fetched when it
    can be and the field falls back to free text when it cannot - so the form
@@ -809,6 +885,7 @@ function draw() {
   else if (v === 'books') books();
   else if (v === 'logs') logs();
   else if (v === 'people') { people(); return; }
+  else if (v === 'notify') { notify(); return; }
   else if (v === 'perms') perms();
   else home();
 }
@@ -821,6 +898,27 @@ document.addEventListener('click', async (e) => {
   if (tl) { go('tool', tl.dataset.tool); return; }
   const g = e.target.closest('[data-go]');
   if (g) { go(g.dataset.go, null); return; }
+
+  if (e.target.id === 'pon' || e.target.id === 'poff') {
+    const btn = e.target;
+    const msg = $('pmsg');
+    const turningOn = btn.id === 'pon';
+    btn.disabled = true;
+    msg.className = 'msg';
+    msg.textContent = turningOn ? 'Asking the phone…' : 'Switching off…';
+    try {
+      if (turningOn) await push.enable(); else await push.disable();
+      notify();
+    } catch (err) {
+      btn.disabled = false;
+      msg.className = 'msg bad';
+      /* The reasons this fails are mostly the phone's, not the app's, and
+         they are worth reading in full rather than being flattened into
+         "something went wrong". */
+      msg.textContent = (err && err.message) || 'That did not work.';
+    }
+    return;
+  }
   const c = e.target.closest('[data-cust]');
   if (c) { go('customer', c.dataset.cust); return; }
   const r = e.target.closest('[data-rig]');
@@ -1226,13 +1324,57 @@ function friendly(err) {
   return (err && err.message) || 'Sign-in failed.';
 }
 
+/* ---------- arriving from a notification -------------------------------
+   A notification that lands you on the home screen has made you go and
+   find the thing it just told you about. The worker either opens the app
+   with ?go=… or, if it is already open, posts a message - both end up
+   here. The parameter is scrubbed off the address afterwards so a refresh
+   does not keep bouncing you back to the same screen.
+
+   Anything arriving this way is a VIEW NAME and nothing else: it is
+   checked against the list below before it is used, so a doctored link
+   cannot route into a screen the person's role would not otherwise draw -
+   the screens check their own capability anyway. */
+const FROM_PUSH = ['partsq', 'wolist', 'preoplog', 'partsmine'];
+
+function landFromPush(where) {
+  if (!where || FROM_PUSH.indexOf(where) < 0) return false;
+  go(where, null, true);
+  return true;
+}
+
+function pushParam() {
+  try {
+    const u = new URL(window.location.href);
+    const g = u.searchParams.get('go');
+    if (!g) return '';
+    u.searchParams.delete('go');
+    window.history.replaceState({}, '', u.pathname + (u.search || '') + u.hash);
+    return g;
+  } catch (e) { return ''; }
+}
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    const d = e.data || {};
+    if (d.bsds === 'go') landFromPush(d.go);
+  });
+}
+
 /* ---------- start ----------------------------------------------------- */
 $('demobar').hidden = !DEMO;
+let landed = false;
 auth.onUser(async (u) => {
   if (u && u.role && !DATA.equipment.length) {
     try { await loadData(); } catch (e) { /* drawn empty rather than blank */ }
   }
   if (!u) { stack.length = 0; route = { view: 'home', arg: null }; }
+  /* Only once, and only after the role is known - routing a signed-out
+     person straight at the parts queue would just show them the door. */
+  if (u && u.role && !landed) {
+    landed = true;
+    if (landFromPush(pushParam())) return;
+  }
   draw();
 });
 auth.start();

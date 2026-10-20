@@ -55,6 +55,8 @@ export const CAPS = {
   'reports.view':    'Shop reports, AR aging, job costs',
   'command.view':    'Open the Command Center',
   'hr.view':         'Personnel files',
+  'push.down':       'Be rung on the phone when a rig goes down',
+  'push.wo':         'Be rung on the phone when a work order comes in',
   'users.read':      'See who is on the app and what they are',
   'users.manage':    'Add people and set what they can see',
 };
@@ -72,6 +74,7 @@ export const GRANTS = {
     'receipts.submit', 'receipts.images', 'receipts.log',
     'parts.request', 'parts.order', 'wo.manage', 'books.view',
     'equipment.view', 'customers.edit', 'reports.view', 'users.read',
+    'push.wo',
   ],
   owner: [
     'preop.submit', 'preop.log', 'preop.correct', 'preop.hold',
@@ -80,6 +83,7 @@ export const GRANTS = {
     'parts.request', 'parts.order', 'wo.request', 'wo.manage', 'books.view',
     'equipment.view', 'equipment.edit', 'customers.edit', 'reports.view',
     'command.view', 'hr.view', 'users.read', 'users.manage',
+    'push.down', 'push.wo',
   ],
   customer: ['books.view', 'parts.request'],
 };
@@ -106,4 +110,9 @@ export const HARD_RULES = [
   { role: 'tech',   cap: 'command.view',   why: 'the Command Center is Mike and Stew only' },
   { role: 'office', cap: 'command.view',   why: 'the Command Center is Mike and Stew only' },
   { role: 'tech',   cap: 'wo.manage',       why: 'the service order number is the office\u2019s to write' },
+  { role: 'tech',   cap: 'users.read',      why: 'a tech does not get the staff list' },
+  { role: 'office', cap: 'users.manage',    why: 'office reads the roster, it does not set roles' },
+  { role: 'tech',   cap: 'push.down',       why: 'Mike: a rig down rings Mike and Stew, nobody else' },
+  { role: 'office', cap: 'push.down',       why: 'Mike: a rig down rings Mike and Stew, nobody else' },
+  { role: 'tech',   cap: 'push.wo',         why: 'a work order notifies the office and the owners' },
 ];

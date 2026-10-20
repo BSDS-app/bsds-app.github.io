@@ -4,7 +4,7 @@
   "description": "Broken Spoke Drilling Solutions - the app",
   "type": "module",
   "scripts": {
-    "test": "node test/rules.static.mjs && node test/app.test.mjs && node test/preop.test.mjs && node test/jsa.test.mjs && node test/parts.test.mjs && node test/fleet.test.mjs && node test/people.test.mjs && node test/alerts.test.mjs && node test/workorders.test.mjs",
+    "test": "node test/rules.static.mjs && node test/app.test.mjs && node test/preop.test.mjs && node test/jsa.test.mjs && node test/parts.test.mjs && node test/fleet.test.mjs && node test/people.test.mjs && node test/alerts.test.mjs && node test/workorders.test.mjs && node test/push.test.mjs",
     "test:rules": "firebase emulators:exec --only firestore \"node test/rules.test.mjs\"",
     "deploy:firebase": "firebase deploy --only firestore:rules,firestore:indexes"
   },

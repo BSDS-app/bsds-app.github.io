@@ -190,3 +190,10 @@ export async function db() {
   const { db: d, storeMod } = await loadFirebase();
   return { d, m: storeMod };
 }
+
+/* The initialised app itself, for the one caller that needs more than the
+   database: messaging has to be attached to the same app instance or it
+   signs its tokens for a different project. */
+export async function firebase() {
+  return loadFirebase();
+}

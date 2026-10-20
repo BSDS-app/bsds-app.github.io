@@ -363,6 +363,40 @@ for (const size of [{ width: 390, height: 800 }, { width: 1200, height: 900 }]) 
     after.replace(/\s+/g, ' ').slice(0, 70));
   legacyCleared = false;
 
+  // --- notifications: offered to whoever will be sent something ------
+  // The switch only appears for somebody the sender actually sends to.
+  // A tech is sent nothing, so he gets no switch at all rather than one
+  // that turns on nothing - that is the thing being pinned here.
+  const notifyRow = async () => {
+    const rows = (await page.locator('.list .row .nm').allTextContents()).map(x => x.trim());
+    return rows.includes('Notifications');
+  };
+  for (const [uid, wanted] of [['demo-clint', false], ['demo-jaz', true], ['demo-mike', true]]) {
+    await page.evaluate(() => { try { sessionStorage.clear(); } catch (e) {} });
+    await page.reload();
+    await page.waitForTimeout(300);
+    await page.locator(`[data-demo="${uid}"]`).click();
+    await page.waitForTimeout(600);
+    ok(await notifyRow() === wanted,
+      `${tag} ${uid}: notifications switch ${wanted ? 'offered' : 'not offered'}`);
+  }
+
+  await page.evaluate(() => {
+    [...document.querySelectorAll('.list .row')]
+      .find(r => /Notifications/.test(r.textContent)).click();
+  });
+  await page.waitForTimeout(700);
+  const nt = await page.locator('#view').innerText();
+  ok(/rig down waiting on parts/i.test(nt),
+    `${tag} the screen names the rig-down push`, nt.replace(/\s+/g, ' ').slice(0, 120));
+  ok(/work order rung in/i.test(nt), `${tag} and the work-order push`);
+  ok(/stays on your home screen/i.test(nt),
+    `${tag} and says plainly that everything else just sits there`);
+  ok(await page.locator('#pon, #poff').count() === 1,
+    `${tag} and there is exactly one switch`);
+  ok(!/service order|defect/i.test(nt.split('Everything else')[0] || ''),
+    `${tag} and nothing else is promised as a notification`);
+
   const real = errs.filter(e =>
     !/ERR_TUNNEL_CONNECTION_FAILED|fonts\.googleapis|favicon/.test(e));
   ok(real.length === 0, `${tag} no script errors`, real.slice(0, 3).join(' | '));

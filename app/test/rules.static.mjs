@@ -33,7 +33,7 @@ function allows(body, verb) {
 
 const COLLECTIONS = ['users', 'invites', 'customers', 'equipment', 'preops', 'jsas',
                      'receipts', 'partsRequests', 'partsOrders', 'workOrders',
-                     'reports', 'hr', 'books'];
+                     'fcmTokens', 'reports', 'hr', 'books'];
 
 ok(/rules_version\s*=\s*'2'/.test(src), 'the rules declare version 2');
 ok(/match \/\{document=\*\*\} \{\s*allow read, write: if false;/.test(src),

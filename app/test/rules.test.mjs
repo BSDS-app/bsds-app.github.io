@@ -494,6 +494,34 @@ await ok('and cannot write a record for somebody else', async () => {
     { name: 'Clint', role: 'owner', active: true }));
 });
 
+/* ---- push tokens ------------------------------------------------------
+   A token is the address of one particular phone. Your own is yours;
+   nobody else's is anybody's business, owners included. */
+await ok('a person registers their own device', async () => {
+  await assertSucceeds(setDoc(doc(as('clint'), 'fcmTokens/tok-clint-1'),
+    { uid: 'clint', name: 'Clint', label: 'iPhone', at: new Date().toISOString() }));
+});
+await ok('and cannot register one under somebody else', async () => {
+  await assertFails(setDoc(doc(as('clint'), 'fcmTokens/tok-mike-x'),
+    { uid: 'mike', name: 'Mike', label: 'iPhone', at: new Date().toISOString() }));
+});
+await ok('and reads and clears only their own', async () => {
+  await env.withSecurityRulesDisabled(async (c) =>
+    setDoc(doc(c.firestore(), 'fcmTokens/tok-mike-1'),
+      { uid: 'mike', name: 'Mike', label: 'iPhone' }));
+  await assertSucceeds(getDoc(doc(as('clint'), 'fcmTokens/tok-clint-1')));
+  await assertFails(getDoc(doc(as('clint'), 'fcmTokens/tok-mike-1')));
+  await assertFails(deleteDoc(doc(as('clint'), 'fcmTokens/tok-mike-1')));
+  await assertSucceeds(deleteDoc(doc(as('clint'), 'fcmTokens/tok-clint-1')));
+});
+await ok('not even an owner reads the list of phones', async () => {
+  await assertFails(getDocs(collection(as('mike'), 'fcmTokens')));
+  await assertFails(getDoc(doc(as('mike'), 'fcmTokens/tok-noah-1')));
+});
+await ok('an owner can still clear his own', async () => {
+  await assertSucceeds(deleteDoc(doc(as('mike'), 'fcmTokens/tok-mike-1')));
+});
+
 /* ---- switched off, never admitted, and not signed in at all ------------ */
 await ok('somebody switched off gets nothing', async () => {
   await assertFails(getDoc(doc(as('gone'), 'equipment/wesco-ut--70165')));

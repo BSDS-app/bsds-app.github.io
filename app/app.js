@@ -811,11 +811,7 @@ document.addEventListener('click', async (e) => {
     const msg = $('pmsg2');
     msg.className = 'msg';
     const out = parts.collect($('view'), { equipment: DATA.equipment });
-    if (out.problems) {
-      msg.innerHTML = out.problems.map(x => esc(x)).join('<br>');
-      msg.scrollIntoView({ block: 'center', behavior: 'smooth' });
-      return;
-    }
+    if (out.problems) { showProblems(msg, out, $('view')); return; }
     e.target.disabled = true;
     msg.textContent = 'Sending…';
     try {
@@ -1010,14 +1006,29 @@ document.addEventListener('click', async (e) => {
 /* Filing a form. Identical for both, which is why it is written once: read
    the form, refuse it with every reason at once rather than one at a time,
    and only navigate away once it is actually stored. */
+/* A refused form takes you to the first thing that is wrong and marks it,
+   rather than printing a list at the bottom of a long page and leaving you
+   to find it. Fix that one, press again, and it walks you down. */
+function showProblems(msg, out, host) {
+  host.querySelectorAll('.badfield').forEach(e => e.classList.remove('badfield'));
+  msg.className = 'msg';
+  msg.innerHTML = out.problems.map(p => esc(p)).join('<br>');
+  const el = out.at ? host.querySelector(out.at) : null;
+  if (!el) { msg.scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
+  const box = el.closest('.item, .fld, .steprow, .partrow, .urg, .items') || el;
+  box.classList.add('badfield');
+  box.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  if (typeof el.focus === 'function') {
+    try { el.focus({ preventScroll: true }); } catch (e) { /* older browsers */ }
+  }
+}
+
 async function file(btn, msgId, mod, tpl, view, what) {
   const msg = $(msgId);
   if (!tpl) { msg.textContent = 'The form is still loading.'; return; }
   const out = mod.collect($('view'), tpl, { equipment: DATA.equipment });
   if (out.problems) {
-    msg.className = 'msg';
-    msg.innerHTML = out.problems.map(p => esc(p)).join('<br>');
-    msg.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    showProblems(msg, out, $('view'));
     return;
   }
   btn.disabled = true;

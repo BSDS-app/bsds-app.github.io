@@ -315,7 +315,13 @@ export function formClick(e, host, tpl) {
 /* ---------- reading the form ----------------------------------------- */
 
 export function collect(host, tpl, ctx) {
+  /* Every refusal carries the field it is about, so the form can take the
+     person TO the thing rather than printing a list at the bottom and
+     leaving them to hunt. The first one wins - fix that, press again, and
+     it walks you down. */
   const problems = [];
+  let at = null;
+  const bad = (text, sel) => { problems.push(text); if (!at && sel) at = sel; };
   const u = auth.currentUser();
   const val = k => {
     const el = host.querySelector('[data-j="' + k + '"]');
@@ -326,32 +332,34 @@ export function collect(host, tpl, ctx) {
 
   /* ---- header ---- */
   tpl.header.forEach(f => {
-    if (f.req && !val(f.key)) problems.push(f.label + ' is needed.');
+    if (f.req && !val(f.key)) bad(f.label + ' is needed.', '[data-j="' + f.key + '"]');
   });
 
   /* ---- hazard review: every category answered, every YES explained ---- */
   const hazards = [];
-  let unanswered = 0;
+  let unanswered = 0, firstUnanswered = null;
   tpl.hazards.forEach(hz => {
     const row = host.querySelector('[data-haz="' + hz.key + '"]');
     const on = row && row.querySelector('.res.on');
     const ta = row && row.querySelector('textarea');
     const r = on ? on.dataset.result : '';
     const ctl = ta ? ta.value.trim() : '';
-    if (!r) unanswered++;
+    if (!r) { unanswered++; if (!firstUnanswered) firstUnanswered = hz.key; }
     if (r === 'yes' && !ctl) {
-      problems.push('“' + hz.label + '” is a YES — write the controls for it.');
+      bad('“' + hz.label + '” is a YES — write the controls for it.',
+        '[data-haz="' + hz.key + '"] textarea');
     }
     hazards.push({ k: hz.key, label: hz.label, r, ctl,
       ...(hz.permit ? { permit: hz.permit } : {}) });
   });
   if (hazards.length !== tpl.hazards.length) {
-    problems.push(`The form drew ${hazards.length} hazard categories but the `
+    bad(`The form drew ${hazards.length} hazard categories but the `
       + `review has ${tpl.hazards.length}. Not filing a partial JSA.`);
   }
   if (unanswered) {
-    problems.push(unanswered + ' hazard categor' + (unanswered === 1 ? 'y' : 'ies')
-      + ' not answered. Every one needs NO, YES or N/A.');
+    bad(unanswered + ' hazard categor' + (unanswered === 1 ? 'y' : 'ies')
+      + ' not answered. Every one needs NO, YES or N/A.',
+      firstUnanswered ? '[data-haz="' + firstUnanswered + '"]' : null);
   }
 
   /* ---- the permits the review opened ---- */
@@ -369,8 +377,9 @@ export function collect(host, tpl, ctx) {
       if (!f.req) return;
       const v = val(f.key);
       if (f.kind === 'check' ? v !== true : !v) {
-        problems.push(spec.title + ' — ' + f.label
-          + (f.kind === 'check' ? ' must be confirmed.' : ' is needed.'));
+        bad(spec.title + ' — ' + f.label
+          + (f.kind === 'check' ? ' must be confirmed.' : ' is needed.'),
+          '[data-j="' + f.key + '"]');
       }
     });
     permits[key] = { title: spec.title, fields };
@@ -388,12 +397,14 @@ export function collect(host, tpl, ctx) {
     tpl.loto.fields.filter(f => f.whenLoto && f.req).forEach(f => {
       const v = val(f.key);
       if (f.kind === 'check' ? v !== true : !v) {
-        problems.push('LOTO — ' + f.label
-          + (f.kind === 'check' ? ' must be confirmed.' : ' is needed.'));
+        bad('LOTO — ' + f.label
+          + (f.kind === 'check' ? ' must be confirmed.' : ' is needed.'),
+          '[data-j="' + f.key + '"]');
       }
     });
     if (!sources.length) {
-      problems.push('LOTO is required — say which energy sources were isolated.');
+      bad('LOTO is required — say which energy sources were isolated.',
+        '[data-loto="0"]');
     }
   }
 
@@ -408,30 +419,33 @@ export function collect(host, tpl, ctx) {
     const any = tpl.steps.columns.some(c => g[c.key]);
     const all = tpl.steps.columns.every(c => g[c.key]);
     if (any && !all) {
-      problems.push('Step ' + r.dataset.step + ' is half filled in — a step needs '
-        + 'the work, the hazard and the control.');
+      bad('Step ' + r.dataset.step + ' is half filled in — a step needs '
+        + 'the work, the hazard and the control.',
+        '.steprow[data-step="' + r.dataset.step + '"]');
     }
     if (all) steps.push(g);
   });
   if (!steps.length) {
-    problems.push('Break the job into at least one step, with its hazard and control.');
+    bad('Break the job into at least one step, with its hazard and control.',
+      '.steprow[data-step="1"] [data-col="desc"]');
   }
 
   /* ---- reflection and sign-off ---- */
   if (tpl.reflection.req && !val(tpl.reflection.key)) {
-    problems.push(tpl.reflection.label);
+    bad('Answer the daily risk reflection — ' + tpl.reflection.label,
+      '[data-j="' + tpl.reflection.key + '"]');
   }
   tpl.signoff.forEach(f => {
     if (!f.req) return;
     const v = val(f.key);
     if (f.kind === 'check' ? v !== true : !v) {
-      problems.push(f.kind === 'check'
+      bad(f.kind === 'check'
         ? 'Confirm the crew acknowledgement before filing.'
-        : f.label + ' is needed.');
+        : f.label + ' is needed.', '[data-j="' + f.key + '"]');
     }
   });
 
-  if (problems.length) return { problems };
+  if (problems.length) return { problems, at };
 
   const unitRaw = val('jsaEquipment');
   const match = (ctx.equipment || []).find(e =>

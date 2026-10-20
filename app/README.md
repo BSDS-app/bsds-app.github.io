@@ -56,7 +56,7 @@ button is not security — anybody can open the browser console.
 | `forms/jsa.v1.json` | the JSA — 12 MSHA hazard categories, 3 conditional permits, 79 answerable items |
 | `forms/build_*.py` | how those files were built, and the count gates that prove no line went missing |
 | `seed/` | 15 customers and 77 rigs from the Fullbay export |
-| `test/` | 160 shell, 259 Pre-Op, 149 JSA, 88 Parts, 73 Fleet, 48 People, 34 Alerts, 97 rule, 60 emulator checks |
+| `test/` | 160 shell, 259 Pre-Op, 164 JSA, 88 Parts, 73 Fleet, 48 People, 34 Alerts, 97 rule, 60 emulator checks |
 
 Until `config.js` has a Firebase key the app runs in **demo mode**: a person
 picker instead of a sign-in form, no network, nothing written. The screens are
@@ -171,6 +171,36 @@ pre-ops so there is one answer to the question.
 
 Both are visible on the record and counted on the log, so nothing is quietly
 being kept or quietly being dropped.
+
+---
+
+## Forms that refuse
+
+A refused form takes you to the first thing that is wrong, marks it, and
+scrolls to it. Fix that one, press again, and it walks you down to the next.
+It does not print a list at the bottom of a long page and leave you to hunt
+for what it means — which is how a JSA that would not save got read as
+"answering No is not allowed".
+
+Two rules that came out of that:
+
+- **Never print a field's label as if it were the error.** "What's the most
+  dangerous task of your day?" is a question, not an instruction; the refusal
+  has to say *answer this*.
+- **Every refusal carries the field it is about.** `collect()` returns an
+  `at` selector alongside the problems, and the form marks that element.
+
+## Big enough to use
+
+Nothing interactive is under **44px** tall — the number Apple and Google both
+land on. A drill deck is not a desk and this gets used with gloves on, so
+there is a test at phone width that fails if anything drops below it. For a
+checkbox the hit area is its label, and the test measures that rather than
+the box.
+
+The page is drawn edge to edge (`viewport-fit=cover`), so the top bar pads
+for the status bar and the notch, and long pages pad for the home indicator.
+Without that the bar sits underneath the clock on an iPhone.
 
 ---
 

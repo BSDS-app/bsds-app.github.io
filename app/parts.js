@@ -73,16 +73,18 @@ export function sortQueue(rows) {
 
 export function collect(host, ctx) {
   const problems = [];
+  let at = null;
+  const bad = (text, sel) => { problems.push(text); if (!at && sel) at = sel; };
   const val = k => {
     const el = host.querySelector('[data-p="' + k + '"]');
     return el ? String(el.value || '').trim() : '';
   };
   const on = host.querySelector('.res.on');
   const urgency = on ? on.dataset.result : '';
-  if (!urgency) problems.push('Say how urgent it is.');
+  if (!urgency) bad('Say how urgent it is.', '.urg');
 
   const unit = val('unit');
-  if (!unit) problems.push('Which machine is it for?');
+  if (!unit) bad('Which machine is it for?', '[data-p="unit"]');
 
   const lines = [];
   host.querySelectorAll('.partrow').forEach(r => {
@@ -94,20 +96,24 @@ export function collect(host, ctx) {
     const any = g.pn || g.desc || g.vendor || g.qty;
     if (!any) return;
     if (!g.pn && !g.desc) {
-      problems.push('Line ' + r.dataset.part + ' needs a part number or a description '
-        + '— one of the two.');
+      bad('Line ' + r.dataset.part + ' needs a part number or a description '
+        + '— one of the two.',
+        '.partrow[data-part="' + r.dataset.part + '"] [data-col="desc"]');
       return;
     }
     const q = Number(g.qty);
     if (!g.qty || !Number.isFinite(q) || q <= 0) {
-      problems.push('Line ' + r.dataset.part + ' needs a quantity.');
+      bad('Line ' + r.dataset.part + ' needs a quantity.',
+        '.partrow[data-part="' + r.dataset.part + '"] [data-col="qty"]');
       return;
     }
     lines.push({ pn: g.pn, qty: q, desc: g.desc, vendor: g.vendor });
   });
-  if (!lines.length) problems.push('Put at least one part on it.');
+  if (!lines.length) {
+    bad('Put at least one part on it.', '.partrow[data-part="1"] [data-col="pn"]');
+  }
 
-  if (problems.length) return { problems };
+  if (problems.length) return { problems, at };
 
   const u = auth.currentUser();
   const match = (ctx.equipment || []).find(e =>

@@ -395,3 +395,49 @@ td i.lookup{color:var(--warn);font-style:normal;font:500 12px/1.4 var(--mono)}
 .alert.soon{border-left-color:var(--mark)}
 .alert.note{border-left-color:var(--rule)}
 .alert.note .t{font-weight:500;color:var(--ink2)}
+
+/* ---- the field a refused form is pointing at ------------------------- */
+.badfield{position:relative;box-shadow:0 0 0 2px var(--red);border-radius:4px;
+  animation:nudge .5s ease}
+.badfield textarea,.badfield input,.badfield select{border-color:var(--red)}
+@keyframes nudge{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}
+  75%{transform:translateX(4px)}}
+@media (prefers-reduced-motion:reduce){.badfield{animation:none}}
+
+/* ---- big enough to hit with a glove on ------------------------------- */
+/* 44px is the number Apple and Google both land on; a drill deck is not a
+   desk, so nothing interactive goes under it. */
+.top .back{min-height:44px;padding:10px 12px 10px 6px}
+.top .out{min-height:44px;padding:0 12px;display:flex;align-items:center}
+.res{min-height:46px}
+.mini{min-height:44px;padding:10px 14px}
+.mini.del{min-height:44px;padding:11px 13px}
+label.chk{min-height:48px;align-items:center}
+label.chk input{width:24px;height:24px}
+.row.pick label.chk{min-height:44px;min-width:44px;justify-content:center}
+.prow .act select{min-height:44px}
+.fld input,.fld select,.fld textarea{min-height:46px}
+.find input{min-height:46px}
+.panel input{min-height:46px}
+.item textarea,.steprow textarea,.partrow textarea{min-height:44px}
+.alert{min-height:52px}
+.row{min-height:52px}
+.tile{min-height:76px}
+.btn{min-height:50px}
+
+/* ---- room for the notch, the status bar and the home indicator -------
+   The page is drawn edge to edge (viewport-fit=cover), so without these the
+   top bar sits underneath the clock on an iPhone and the last row of a long
+   form sits under the home indicator. */
+.top{padding-top:env(safe-area-inset-top,0px);
+  padding-left:max(12px,env(safe-area-inset-left,0px));
+  padding-right:max(12px,env(safe-area-inset-right,0px));
+  min-height:calc(var(--hdh) + env(safe-area-inset-top,0px))}
+.demo{padding-top:calc(7px + env(safe-area-inset-top,0px))}
+.demo:not([hidden]) ~ .top{padding-top:0;min-height:var(--hdh)}
+.wrap{padding-left:max(14px,env(safe-area-inset-left,0px));
+  padding-right:max(14px,env(safe-area-inset-right,0px));
+  padding-bottom:calc(70px + env(safe-area-inset-bottom,0px))}
+.signin{padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px))}
+.frame{bottom:env(safe-area-inset-bottom,0px)}

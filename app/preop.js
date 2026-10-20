@@ -107,7 +107,10 @@ export function retentionNote(rec) {
 /* Reads the drawn form. Returns { rec } or { problems: [...] }. Nothing is
    written until this comes back clean. */
 export function collect(root, tpl, ctx) {
+  /* Refusals carry the field they are about - see the note in jsa.js. */
   const problems = [];
+  let at = null;
+  const bad = (text, sel) => { problems.push(text); if (!at && sel) at = sel; };
   const val = k => {
     const el = root.querySelector('[data-f="' + k + '"]');
     return el ? String(el.value || '').trim() : '';
@@ -119,7 +122,7 @@ export function collect(root, tpl, ctx) {
   if (typeKey && !secs) problems.push('That equipment type has no checklist for that frequency.');
 
   const items = [];
-  let missing = 0;
+  let missing = 0, firstBlank = null;
   if (secs) {
     let n = 0;
     for (const [section, lines] of Object.entries(secs)) {
@@ -128,7 +131,7 @@ export function collect(root, tpl, ctx) {
         const on = row ? row.querySelector('.res.on') : null;
         const noteEl = row ? row.querySelector('textarea') : null;
         const r = on ? on.dataset.result : '';
-        if (!r) missing++;
+        if (!r) { missing++; if (firstBlank === null) firstBlank = n; }
         items.push({ s: section, i: text, r: r, n: noteEl ? noteEl.value.trim() : '' });
         n++;
       });
@@ -138,22 +141,28 @@ export function collect(root, tpl, ctx) {
        26 lines is the failure this project keeps having. */
     const want = lineCount(tpl, typeKey, freq);
     if (items.length !== want) {
-      problems.push(`The form drew ${items.length} lines but the checklist has ${want}. `
+      bad(`The form drew ${items.length} lines but the checklist has ${want}. `
         + 'Not submitting a partial record.');
     }
   }
   if (missing) {
-    problems.push(missing + ' line' + (missing === 1 ? '' : 's')
-      + ' not marked. Every line needs Pass, Fail or N/A.');
+    bad(missing + ' line' + (missing === 1 ? '' : 's')
+      + ' not marked. Every line needs Pass, Fail or N/A.',
+      firstBlank === null ? null : '[data-item="' + firstBlank + '"]');
   }
   const failed = items.filter(i => i.r === 'fail');
-  failed.forEach(i => { if (!i.n) problems.push('A failed line needs a note: “' + i.i + '”'); });
+  items.forEach((i, n) => {
+    if (i.r === 'fail' && !i.n) {
+      bad('A failed line needs a note: “' + i.i + '”',
+        '[data-item="' + n + '"] textarea');
+    }
+  });
 
-  if (!val('operatorName')) problems.push('Operator name.');
-  if (!val('inspDate')) problems.push('Date and time of the inspection.');
-  if (!val('signName')) problems.push('Sign it — type your name at the bottom.');
+  if (!val('operatorName')) bad('Operator name.', '[data-f="operatorName"]');
+  if (!val('inspDate')) bad('Date and time of the inspection.', '[data-f="inspDate"]');
+  if (!val('signName')) bad('Sign it — type your name at the bottom.', '[data-f="signName"]');
 
-  if (problems.length) return { problems };
+  if (problems.length) return { problems, at };
 
   const u = auth.currentUser();
   const t = tpl.types[typeKey];

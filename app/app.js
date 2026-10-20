@@ -37,6 +37,12 @@ async function loadData() {
   };
 }
 
+/* A tool on our own site can be shown inside the app, with the app's bar and
+   its Back button still above it. Anything else - Fullbay, a parts book on
+   claude.ai - is somebody else's site and has to open in its own tab. */
+const OURS = 'https://bsds-app.github.io/';
+const inApp = url => typeof url === 'string' && url.indexOf(OURS) === 0;
+
 const machinesOf = cid => DATA.equipment.filter(e => e.customer === cid);
 const bookFor = serial => CONFIG.books.find(b => b.serial && serial && b.serial === serial);
 
@@ -117,11 +123,17 @@ function home() {
   const tiles = [];
   for (const [key, t] of Object.entries(CONFIG.tools)) {
     if (!auth.allow(t.cap)) continue;
-    tiles.push(t.url
-      ? `<a class="tile" href="${esc(t.url)}" target="_blank" rel="noopener">`
-        + `<b>${esc(t.title)}</b><span>${esc(t.blurb)}</span></a>`
-      : `<div class="tile off"><b>${esc(t.title)}</b><span>${esc(t.blurb)}</span>`
-        + `<em>No address configured yet</em></div>`);
+    if (!t.url) {
+      tiles.push(`<div class="tile off"><b>${esc(t.title)}</b>`
+        + `<span>${esc(t.blurb)}</span><em>No address configured yet</em></div>`);
+    } else if (inApp(t.url)) {
+      tiles.push(`<button class="tile" data-tool="${esc(key)}">`
+        + `<b>${esc(t.title)}</b><span>${esc(t.blurb)}</span></button>`);
+    } else {
+      tiles.push(`<a class="tile out" href="${esc(t.url)}" target="_blank" rel="noopener">`
+        + `<b>${esc(t.title)}</b><span>${esc(t.blurb)}</span>`
+        + `<em class="leaves">Opens in a new tab</em></a>`);
+    }
   }
   if (tiles.length) {
     h.push('<h2 class="sec">Tools</h2><div class="tiles">', tiles.join(''), '</div>');
@@ -130,8 +142,8 @@ function home() {
   /* While the old Launcher is still up, everyone gets a door back to it. */
   if (CONFIG.legacy && CONFIG.legacy.url) {
     h.push('<h2 class="sec">Still running</h2><div class="tiles">',
-      `<a class="tile legacy" href="${esc(CONFIG.legacy.url)}" target="_blank" rel="noopener">`,
-      `<b>${esc(CONFIG.legacy.title)}</b><span>${esc(CONFIG.legacy.blurb)}</span></a>`,
+      `<button class="tile legacy" data-tool="__legacy">`,
+      `<b>${esc(CONFIG.legacy.title)}</b><span>${esc(CONFIG.legacy.blurb)}</span></button>`,
       '</div>');
   }
 
@@ -277,6 +289,31 @@ function books() {
   $('view').innerHTML = h.join('');
 }
 
+/* A tool, shown inside the app. The bar above it stays, so Back goes back to
+   where you were instead of leaving you stranded in another tab. */
+function tool(key) {
+  const t = key === '__legacy' ? CONFIG.legacy : CONFIG.tools[key];
+  if (!t || !t.url) { $('view').innerHTML =
+    '<div class="wrap"><div class="empty">That tool has no address yet.</div></div>'; return; }
+  chrome(t.title, t.blurb);
+  document.body.classList.add('framed');
+  $('view').innerHTML = '<div class="frame"><iframe src="' + esc(t.url)
+    + '" title="' + esc(t.title) + '" '
+    + 'allow="camera; clipboard-write" referrerpolicy="same-origin"></iframe></div>';
+  sitFrameUnderBar();
+}
+
+/* The bar is not always the same height - the preview banner sits above it,
+   and a phone adds its own inset - so the frame is placed under wherever the
+   bar actually ends rather than under where it is assumed to end. */
+function sitFrameUnderBar() {
+  const f = document.querySelector('.frame');
+  if (!f) return;
+  f.style.top = Math.max(0, document.querySelector('.top').getBoundingClientRect().bottom) + 'px';
+}
+window.addEventListener('resize', sitFrameUnderBar);
+window.addEventListener('orientationchange', sitFrameUnderBar);
+
 function logs() {
   chrome('Logs', 'Pre-op, JSA, receipts');
   $('view').innerHTML = '<div class="wrap"><h1 class="pg">Logs</h1>'
@@ -351,9 +388,11 @@ function perms() {
 /* ---------- draw ------------------------------------------------------ */
 function draw() {
   const u = auth.currentUser();
+  document.body.classList.remove('framed');
   if (!u) { signIn(); return; }
   if (!u.role) { pending(); return; }
   const v = route.view;
+  if (v === 'tool') { tool(route.arg); return; }
   if (v === 'equipment') equipment();
   else if (v === 'customer') customer(route.arg);
   else if (v === 'rig') machine(route.arg);
@@ -368,6 +407,8 @@ function draw() {
 document.addEventListener('click', async (e) => {
   const d = e.target.closest('[data-demo]');
   if (d) { auth.demoSignIn(d.dataset.demo); return; }
+  const tl = e.target.closest('[data-tool]');
+  if (tl) { go('tool', tl.dataset.tool); return; }
   const g = e.target.closest('[data-go]');
   if (g) { go(g.dataset.go, null); return; }
   const c = e.target.closest('[data-cust]');

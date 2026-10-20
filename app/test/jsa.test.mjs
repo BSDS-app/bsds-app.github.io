@@ -222,6 +222,65 @@ for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) 
     `${tag} an unanswered review is refused by count`, await msg());
   ok(await page.locator('.sheet').count() === 0, `${tag} and nothing was filed`);
 
+  // ---- a refusal has to take you TO the problem -------------------
+  // This is the one Mike hit: all NO, and it would not file, and the reason
+  // was printed somewhere he had to go looking for.
+  await markAll('no');
+  await setJ('jsaSite', 'Shop');
+  await setJ('jsaTaskDesc', 'Change the rotary head seals');
+  await page.locator('#jsubmit').click();
+  await page.waitForTimeout(600);
+  const refusal = await msg();
+  ok(/Answer the daily risk reflection/.test(refusal),
+    `${tag} the reflection is asked for in words, not by printing its label`,
+    refusal.replace(/\n/g, ' | ').slice(0, 140));
+  ok(!/^What's the most dangerous task of your day\?$/m.test(refusal),
+    `${tag} and never as a bare question with no instruction`);
+  ok(await page.locator('.badfield').count() === 1,
+    `${tag} exactly one field is marked as the one to fix`,
+    String(await page.locator('.badfield').count()));
+  const marked = await page.evaluate(() => {
+    const b = document.querySelector('.badfield');
+    if (!b) return null;
+    const r = b.getBoundingClientRect();
+    return { has: !!b.querySelector('[data-col="desc"], [data-j], textarea, input'),
+      onScreen: r.top > -200 && r.top < window.innerHeight + 200 };
+  });
+  ok(marked && marked.has, `${tag} and it is a field, not a heading`);
+  ok(marked && marked.onScreen, `${tag} and the page has scrolled to it`,
+    JSON.stringify(marked));
+
+  // fixing it and pressing again walks you to the next one
+  await setJ('mostDangerousTask', 'Pulling the head on the deck');
+  await page.locator('#jsubmit').click();
+  await page.waitForTimeout(600);
+  ok(!/daily risk reflection/.test(await msg()),
+    `${tag} fixing one clears it from the list`);
+  ok(await page.locator('.badfield').count() === 1,
+    `${tag} and it moves on to the next thing`);
+
+  // ---- big enough to use with gloves on ---------------------------
+  if (size.width === 390) {
+    const small = await page.evaluate(() => {
+      const tiny = [];
+      document.querySelectorAll('#view button, #view select, #view input, '
+        + '.top button').forEach(e => {
+        if (e.type === 'hidden' || e.hidden) return;
+        /* a checkbox's hit area is its label, not the box - measure what a
+           thumb actually lands on */
+        const target = e.type === 'checkbox' ? (e.closest('label') || e) : e;
+        const r = target.getBoundingClientRect();
+        if (r.height > 0 && r.height < 44) {
+          tiny.push((target.className || target.tagName) + ' ' + Math.round(r.height) + 'px');
+        }
+      });
+      return [...new Set(tiny)];
+    });
+    ok(small.length === 0,
+      `${tag} nothing interactive is under 44px - this is used with gloves on`,
+      small.slice(0, 6).join(' ; '));
+  }
+
   // ---- a YES has to say what the controls are ---------------------
   await markAll('no');
   await mark('pinch', 'yes');
@@ -376,7 +435,7 @@ for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) 
     [...document.querySelectorAll('.list .row')].find(r => /Logs/.test(r.textContent)).click();
   });
   await page.waitForTimeout(350);
-  await page.locator('[data-go="jsalog"]').click();
+  await page.locator('.list .row[data-go="jsalog"], .bar [data-go="jsalog"]').click();
   await page.waitForTimeout(500);
   ok(await page.locator('[data-jsa]').count() === 3, `${tag} office sees all three`);
   const spec = await page.locator('.spec').textContent();
@@ -395,7 +454,7 @@ for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) 
     [...document.querySelectorAll('.list .row')].find(r => /Logs/.test(r.textContent)).click();
   });
   await page.waitForTimeout(350);
-  await page.locator('[data-go="jsalog"]').click();
+  await page.locator('.list .row[data-go="jsalog"], .bar [data-go="jsalog"]').click();
   await page.waitForTimeout(500);
   await page.locator('[data-jsa]').first().click();
   await page.waitForTimeout(500);

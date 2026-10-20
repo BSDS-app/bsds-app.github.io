@@ -333,3 +333,12 @@ h3.ssec{font:600 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercas
   .prow{grid-template-columns:1fr}
   .prow .act{justify-content:flex-start}
 }
+
+/* ---- a row of small actions above a list ----------------------------- */
+.bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.bar .mini{margin-top:0}
+.note .mini{margin-top:9px}
+/* a machine that has left the fleet: still findable, visibly out of play */
+.row.retired{opacity:.6}
+.row.retired .nm::after{content:" · retired";font:500 10px/1 var(--mono);
+  letter-spacing:.08em;text-transform:uppercase;color:var(--warn)}

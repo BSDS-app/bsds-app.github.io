@@ -10,6 +10,7 @@ import * as auth from './auth.js';
 import * as preop from './preop.js';
 import * as jsa from './jsa.js';
 import * as team from './people.js';
+import * as fleet from './fleet.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s)
@@ -27,7 +28,7 @@ async function loadData() {
       fetch('seed/customers.json').then(r => r.json()),
       fetch('seed/equipment.json').then(r => r.json()),
     ]);
-    DATA = { customers: c, equipment: e };
+    DATA = fleet.nameFleet(fleet.overlay({ customers: c, equipment: e }));
     return;
   }
   const { d, m } = await auth.db();
@@ -35,10 +36,10 @@ async function loadData() {
     m.getDocs(m.collection(d, 'customers')),
     m.getDocs(m.collection(d, 'equipment')),
   ]);
-  DATA = {
+  DATA = fleet.nameFleet({
     customers: cs.docs.map(x => ({ id: x.id, ...x.data() })),
     equipment: es.docs.map(x => ({ id: x.id, ...x.data() })),
-  };
+  });
 }
 
 /* A tool on our own site can be shown inside the app, with the app's bar and
@@ -48,11 +49,17 @@ const OURS = 'https://bsds-app.github.io/';
 const inApp = url => typeof url === 'string' && url.indexOf(OURS) === 0;
 
 const machinesOf = cid => DATA.equipment.filter(e => e.customer === cid);
-const bookFor = serial => CONFIG.books.find(b => b.serial && serial && b.serial === serial);
+/* One matcher for book-to-serial, in fleet.js, so the fleet screen and the
+   machine screen cannot disagree about which book a rig takes. */
+const bookFor = fleet.bookFor;
 
 /* ---------- navigation ------------------------------------------------ */
-function go(view, arg) {
-  stack.push({ ...route, scroll: window.scrollY });
+/* `replace` drops the screen you are leaving instead of stacking it. Used
+   when a form has just been filed: Back should take you where you were
+   before you started filling it in, not back into the blank form you have
+   already submitted. */
+function go(view, arg, replace) {
+  if (!replace) stack.push({ ...route, scroll: window.scrollY });
   route = { view, arg };
   draw();
   window.scrollTo(0, 0);
@@ -214,15 +221,46 @@ function home() {
 }
 
 function equipment() {
-  chrome('Machines', DATA.equipment.length + ' rigs');
+  const live = DATA.equipment.filter(e => !e.retired);
+  chrome('Machines', live.length + ' rigs');
+  const noSerial = fleet.needSerial(DATA.equipment);
   const h = ['<div class="wrap"><h1 class="pg">Machines</h1>',
-    '<p class="lede">Straight off the Fullbay equipment export. Pick a customer, ',
-    'then a rig, and the app gathers what it has on that serial.</p>',
-    '<div class="find"><input id="q" type="search" placeholder="Customer, unit, serial or model" ',
-    'autocomplete="off" spellcheck="false"></div><div id="hits"></div></div>'];
+    '<p class="lede">Pick a customer, then a rig, and the app gathers what it has ',
+    'on that serial.</p>'];
+  if (auth.allow('equipment.edit') || auth.allow('customers.edit')) {
+    h.push('<div class="bar">');
+    if (auth.allow('equipment.edit')) {
+      h.push('<button class="mini" data-go="editrig">+ Add a machine</button>');
+    }
+    if (auth.allow('customers.edit')) {
+      h.push('<button class="mini" data-go="editcust">+ Add a customer</button>');
+    }
+    h.push('</div>');
+  }
+  /* The blank serials are not a tidy-up job - each one is a rig whose parts
+     book cannot be matched until somebody reads the plate. So they are a
+     worklist on the front of this screen rather than something you would
+     only notice by scrolling. */
+  if (noSerial.length) {
+    h.push('<div class="note warn"><b>', noSerial.length, ' machine',
+      noSerial.length === 1 ? '' : 's', ' with no serial on file.</b> ',
+      'The parts books are laid out by serial, so these cannot be matched to a book ',
+      'until the plate is read. ',
+      '<button class="mini" id="shownoserial">Show them</button></div>');
+  }
+  h.push('<div class="find"><input id="q" type="search" placeholder="Customer, unit, serial or model" ',
+    'autocomplete="off" spellcheck="false"></div><div id="hits"></div></div>');
   $('view').innerHTML = h.join('');
   drawHits('');
   $('q').addEventListener('input', e => drawHits(e.target.value));
+  const sn = $('shownoserial');
+  if (sn) {
+    sn.addEventListener('click', () => {
+      $('hits').innerHTML = '<div class="list">'
+        + fleet.needSerial(DATA.equipment).map(e => machineRow(e, true)).join('')
+        + '</div>';
+    });
+  }
 }
 
 function drawHits(term) {
@@ -231,7 +269,7 @@ function drawHits(term) {
   if (!t) {
     h.push('<div class="list">');
     DATA.customers.forEach(c => {
-      const n = machinesOf(c.id).length;
+      const n = machinesOf(c.id).filter(e => !e.retired).length;
       h.push('<button class="row" data-cust="', esc(c.id), '">',
         '<span class="nm">', esc(c.name), '</span>',
         '<span class="ct"><b>', n, '</b>rig', n === 1 ? '' : 's', '</span></button>');
@@ -241,6 +279,7 @@ function drawHits(term) {
     const hits = DATA.equipment.filter(e =>
       [e.customerName, e.unit, e.serial, e.model, e.nickname]
         .join(' ').toUpperCase().includes(t));
+    hits.sort((a, b) => (a.retired ? 1 : 0) - (b.retired ? 1 : 0));
     if (!hits.length) {
       h.push('<div class="empty">Nothing matches “', esc(term), '”.</div>');
     } else {
@@ -253,7 +292,7 @@ function drawHits(term) {
 }
 
 function machineRow(e, withCustomer) {
-  return '<button class="row" data-rig="' + esc(e.id) + '">'
+  return '<button class="row' + (e.retired ? ' retired' : '') + '" data-rig="' + esc(e.id) + '">'
     + '<span><span class="nm">' + esc(e.unit)
     + (e.nickname ? ' · ' + esc(e.nickname) : '') + '</span>'
     + '<span class="sub">' + (withCustomer ? esc(e.customerName) + ' · ' : '')
@@ -266,9 +305,28 @@ function customer(cid) {
   const c = DATA.customers.find(x => x.id === cid);
   const ms = machinesOf(cid);
   chrome(c ? c.name : 'Customer', ms.length + ' rigs');
-  $('view').innerHTML = '<div class="wrap"><h1 class="pg">' + esc(c ? c.name : cid) + '</h1>'
-    + '<p class="lede">' + ms.length + ' machine' + (ms.length === 1 ? '' : 's') + ' on file.</p>'
-    + '<div class="list">' + ms.map(e => machineRow(e, false)).join('') + '</div></div>';
+  const live = ms.filter(e => !e.retired);
+  const gone = ms.filter(e => e.retired);
+  const h = ['<div class="wrap"><h1 class="pg">', esc(c ? c.name : cid), '</h1>',
+    '<p class="lede">', live.length, ' machine', live.length === 1 ? '' : 's',
+    ' on file.</p>'];
+  if (auth.allow('customers.edit') || auth.allow('equipment.edit')) {
+    h.push('<div class="bar">');
+    if (auth.allow('customers.edit')) {
+      h.push('<button class="mini" data-editcust="', esc(cid), '">Edit customer</button>');
+    }
+    if (auth.allow('equipment.edit')) {
+      h.push('<button class="mini" data-newrigfor="', esc(cid), '">+ Add a machine</button>');
+    }
+    h.push('</div>');
+  }
+  h.push('<div class="list">', live.map(e => machineRow(e, false)).join(''), '</div>');
+  if (gone.length) {
+    h.push('<h2 class="sec">Retired</h2><div class="list">',
+      gone.map(e => machineRow(e, false)).join(''), '</div>');
+  }
+  h.push('</div>');
+  $('view').innerHTML = h.join('');
 }
 
 function machine(id) {
@@ -278,11 +336,20 @@ function machine(id) {
   const bk = bookFor(e.serial);
   const h = ['<div class="wrap">',
     '<h1 class="pg">', esc(e.unit), e.nickname ? ' · ' + esc(e.nickname) : '', '</h1>',
-    '<p class="lede">', esc(e.customerName), '</p>',
+    '<p class="lede">', esc(e.customerName), '</p>'];
+  if (e.retired) {
+    h.push('<div class="note warn"><b>Retired.</b> Off the working fleet. Its ',
+      'paperwork is still on file and still names it.</div>');
+  }
+  if (auth.allow('equipment.edit')) {
+    h.push('<div class="bar"><button class="mini" data-editrig="', esc(e.id), '">',
+      'Edit this machine</button></div>');
+  }
+  h.push(
     '<div class="spec">',
     cell('Serial', e.serial), cell('Make', e.make), cell('Model', e.modelOnly || e.model),
-    cell('Year', e.year), cell('Meter', e.meter == null ? '' : e.meter.toLocaleString() + ' mi'),
-    '</div>'];
+    cell('Year', e.year), cell('Meter', e.meter == null ? '' : e.meter.toLocaleString()),
+    '</div>');
 
   h.push('<h2 class="sec">Documentation</h2>');
   if (bk) {
@@ -447,6 +514,43 @@ async function jsaRecord(id) {
   }
 }
 
+/* ---------- machines and customers ----------------------------------- */
+function rigForm(arg) {
+  if (!auth.allow('equipment.edit')) {
+    chrome('Machines', 'Not yours to change');
+    $('view').innerHTML = '<div class="wrap"><div class="note warn"><b>Not your '
+      + 'account to change.</b> The equipment list is Mike and Stew.</div></div>';
+    return;
+  }
+  /* arg is either a machine id, or {for: customerId} for a new one on that
+     customer, or null for a new one with nothing filled in. */
+  const forCust = arg && typeof arg === 'object' ? arg.for : null;
+  const rig = arg && typeof arg === 'string'
+    ? DATA.equipment.find(x => x.id === arg) : null;
+  chrome(rig ? 'Edit ' + rig.unit : 'Add a machine', rig ? rig.customerName : 'New');
+  fleet.drawMachineForm($('view'), {
+    machine: rig || (forCust ? { customer: forCust } : null),
+    customers: DATA.customers,
+    equipment: DATA.equipment,
+  });
+  if (!rig && forCust) {
+    const sel = $('view').querySelector('[data-m="customer"]');
+    if (sel) sel.value = forCust;
+  }
+}
+
+function custForm(arg) {
+  if (!auth.allow('customers.edit')) {
+    chrome('Customers', 'Not yours to change');
+    $('view').innerHTML = '<div class="wrap"><div class="note warn"><b>Not your '
+      + 'account to change.</b> Customer records are Mike, Stew and Jazmine.</div></div>';
+    return;
+  }
+  const c = arg ? DATA.customers.find(x => x.id === arg) : null;
+  chrome(c ? 'Edit ' + c.name : 'Add a customer', 'Customer');
+  fleet.drawCustomerForm($('view'), { customer: c, equipment: DATA.equipment });
+}
+
 async function preopRecord(id) {
   chrome('Pre-op inspection', 'As signed');
   $('view').innerHTML = '<div class="wrap"><div class="empty">Loading…</div></div>';
@@ -542,6 +646,8 @@ function draw() {
   if (v === 'jsa') { jsaForm(); return; }
   if (v === 'jsalog') { jsaLog(); return; }
   if (v === 'jsarec') { jsaRecord(route.arg); return; }
+  if (v === 'editrig') { rigForm(route.arg); return; }
+  if (v === 'editcust') { custForm(route.arg); return; }
   if (v === 'equipment') equipment();
   else if (v === 'customer') customer(route.arg);
   else if (v === 'rig') machine(route.arg);
@@ -602,6 +708,74 @@ document.addEventListener('click', async (e) => {
       await (isJsa ? jsa : preop).setHold(route.arg, on, why);
       (isJsa ? jsaRecord : preopRecord)(route.arg);
     } catch (err) { hold.disabled = false; alertish(err); }
+    return;
+  }
+
+  /* ---- machines and customers ---- */
+  const er = e.target.closest('[data-editrig]');
+  if (er) { go('editrig', er.dataset.editrig); return; }
+  const ec = e.target.closest('[data-editcust]');
+  if (ec) { go('editcust', ec.dataset.editcust); return; }
+  const nr = e.target.closest('[data-newrigfor]');
+  if (nr) { go('editrig', { for: nr.dataset.newrigfor }); return; }
+
+  if (e.target.id === 'msave') {
+    const msg = $('mmsg');
+    msg.className = 'msg';
+    const rec = fleet.readForm($('view'), 'm');
+    const editing = typeof route.arg === 'string' ? route.arg : null;
+    const problems = fleet.validateMachine(rec, DATA, editing);
+    if (problems.length) {
+      msg.innerHTML = problems.map(x => esc(x)).join('<br>');
+      return;
+    }
+    const cust = DATA.customers.find(c => c.id === rec.customer);
+    rec.customerName = cust ? cust.name : '';
+    rec.retired = editing
+      ? !!(DATA.equipment.find(x => x.id === editing) || {}).retired : false;
+    e.target.disabled = true;
+    msg.textContent = 'Saving…';
+    try {
+      const saved = await fleet.saveMachine(rec, editing);
+      await loadData();
+      go('rig', saved.id, true);
+    } catch (err) {
+      e.target.disabled = false;
+      msg.textContent = 'It did not save: ' + ((err && err.message) || 'unknown error');
+    }
+    return;
+  }
+  if (e.target.id === 'mretire') {
+    const id = typeof route.arg === 'string' ? route.arg : null;
+    if (!id) return;
+    e.target.disabled = true;
+    try {
+      await fleet.retireMachine(id, e.target.dataset.to === 'off');
+      await loadData();
+      go('rig', id, true);
+    } catch (err) { e.target.disabled = false; alertish(err); }
+    return;
+  }
+  if (e.target.id === 'csave') {
+    const msg = $('cmsg');
+    msg.className = 'msg';
+    const rec = fleet.readForm($('view'), 'm');
+    const editing = route.arg || null;
+    const problems = fleet.validateCustomer(rec, DATA, editing);
+    if (problems.length) {
+      msg.innerHTML = problems.map(x => esc(x)).join('<br>');
+      return;
+    }
+    e.target.disabled = true;
+    msg.textContent = 'Saving…';
+    try {
+      const saved = await fleet.saveCustomer(rec, editing);
+      await loadData();
+      go('customer', saved.id, true);
+    } catch (err) {
+      e.target.disabled = false;
+      msg.textContent = 'It did not save: ' + ((err && err.message) || 'unknown error');
+    }
     return;
   }
 
@@ -693,7 +867,7 @@ async function file(btn, msgId, mod, tpl, view, what) {
   msg.textContent = 'Saving…';
   try {
     const id = await mod.save(out.rec);
-    go(view, id);
+    go(view, id, true);
   } catch (err) {
     btn.disabled = false;
     msg.textContent = 'It did not save: ' + ((err && err.message) || 'unknown error')

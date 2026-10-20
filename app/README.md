@@ -49,11 +49,12 @@ button is not security — anybody can open the browser console.
 | `jsa.js` | the JSA, the same way — including the three permits it can open |
 | `retention.js` | how long a record is kept and what stops it being deleted. One copy, shared |
 | `people.js` | who is on the app: invitations, roles, switching somebody off |
+| `fleet.js` | machines and customers — and the serial rule the parts books depend on |
 | `forms/preop.v1.json` | the checklist itself — 7 equipment types, 179 lines, lifted verbatim off the old app |
 | `forms/jsa.v1.json` | the JSA — 12 MSHA hazard categories, 3 conditional permits, 79 answerable items |
 | `forms/build_*.py` | how those files were built, and the count gates that prove no line went missing |
 | `seed/` | 15 customers and 77 rigs from the Fullbay export |
-| `test/` | 160 shell, 259 Pre-Op, 149 JSA, 48 People, 89 rule, 52 emulator checks |
+| `test/` | 160 shell, 259 Pre-Op, 149 JSA, 73 Fleet, 48 People, 89 rule, 52 emulator checks |
 
 Until `config.js` has a Firebase key the app runs in **demo mode**: a person
 picker instead of a sign-in form, no network, nothing written. The screens are
@@ -167,6 +168,37 @@ being kept or quietly being dropped.
 
 ---
 
+## Machines and customers
+
+Both are edited in the app. Owners keep the fleet; owners and office keep the
+customer records — Jazmine can correct a customer's name without being able
+to restructure the equipment list.
+
+**The serial number is the key to the parts books**, which are laid out by
+serial. So:
+
+- **A duplicate serial is refused**, not warned about. Two machines sharing a
+  serial means one of them opens the other's book, and a tech orders parts or
+  works off a schematic for a different rig. The check ignores punctuation and
+  case, so `9-4-5 3` will not sneak past `9453`.
+- **The 14 machines with no serial are a worklist** on the front of the fleet
+  screen, not something you notice by scrolling. Each one is a rig whose book
+  cannot be matched until somebody reads the plate.
+- A machine with no serial is otherwise perfectly normal. It just has no book.
+
+**A machine that leaves the fleet is retired, never deleted** — same reason as
+people. Pre-ops and JSAs filed against it still name it. Retired machines drop
+off the working lists and still turn up in a search, marked.
+
+**Renaming a customer writes one document.** Each machine carries its
+customer's name as well as its id so the search can match on it, but that copy
+is treated as a cache and refreshed from the customer record on every read.
+The obvious implementation — rewrite the name onto every machine — would have
+failed halfway for Jazmine, who may edit customers and may not write
+equipment, leaving the two lists disagreeing with nothing to show for it.
+
+---
+
 ## Adding people
 
 Three steps, and only the first one is yours:
@@ -232,6 +264,7 @@ node test/app.test.mjs        # the shell, as each role, at phone and desktop wi
 node test/preop.test.mjs      # the Pre-Op form: every line, every role, the retention rules
 node test/jsa.test.mjs        # the JSA: the hazard review, and the permits it refuses to skip
 node test/people.test.mjs     # roles, invitations, and the owner who cannot lock himself out
+node test/fleet.test.mjs      # machines and customers, and every way of getting a duplicate serial past it
 node test/rules.static.mjs    # roles.js and firestore.rules still agree
 ```
 

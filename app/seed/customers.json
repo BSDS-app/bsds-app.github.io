@@ -1,0 +1,77 @@
+[
+ {
+  "id": "3-rivers-drilling-blasting",
+  "name": "3 Rivers Drilling & Blasting",
+  "machines": 22
+ },
+ {
+  "id": "ames-construction-inc",
+  "name": "Ames Construction Inc",
+  "machines": 1
+ },
+ {
+  "id": "ari-inc",
+  "name": "ARI Inc.",
+  "machines": 2
+ },
+ {
+  "id": "black-butte-coal-company",
+  "name": "BLACK BUTTE COAL COMPANY",
+  "machines": 1
+ },
+ {
+  "id": "cate-equipment",
+  "name": "Cate Equipment",
+  "machines": 1
+ },
+ {
+  "id": "fisher-industries",
+  "name": "Fisher Industries",
+  "machines": 24
+ },
+ {
+  "id": "kiewit-mining-group-inc",
+  "name": "Kiewit Mining Group Inc.",
+  "machines": 3
+ },
+ {
+  "id": "rocking-p-blasting",
+  "name": "Rocking P Blasting",
+  "machines": 4
+ },
+ {
+  "id": "sandex-blasting",
+  "name": "Sandex Blasting",
+  "machines": 1
+ },
+ {
+  "id": "simplot-smokey-canyon",
+  "name": "Simplot Smokey Canyon",
+  "machines": 1
+ },
+ {
+  "id": "top-rock-blasting",
+  "name": "Top Rock Blasting",
+  "machines": 2
+ },
+ {
+  "id": "us-calcium-company",
+  "name": "US Calcium Company",
+  "machines": 1
+ },
+ {
+  "id": "wesco-nv",
+  "name": "WESCO - NV",
+  "machines": 3
+ },
+ {
+  "id": "wesco-ut",
+  "name": "WESCO - UT",
+  "machines": 9
+ },
+ {
+  "id": "wilkinson-construction-co",
+  "name": "Wilkinson Construction Co.",
+  "machines": 2
+ }
+]

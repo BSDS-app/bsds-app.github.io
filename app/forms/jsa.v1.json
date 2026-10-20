@@ -1,0 +1,514 @@
+{
+ "form": "jsa",
+ "version": 1,
+ "effective": "2026-10-20",
+ "liftedFrom": "https://bsds-app.github.io/jsa/",
+ "note": "Verbatim copy of the JSA as it stood on 20 Oct 2026. Records store this version number so they render with the form they were signed on.",
+ "title": "Job Safety Analysis",
+ "statusChoices": [
+  {
+   "value": "no",
+   "label": "NO"
+  },
+  {
+   "value": "yes",
+   "label": "YES"
+  },
+  {
+   "value": "na",
+   "label": "N/A"
+  }
+ ],
+ "sectionTitles": {
+  "header": "Job Details",
+  "hazards": "MSHA Hazard Category Review",
+  "ppe": "Required PPE",
+  "loto": "Lockout / Tagout (LOTO)",
+  "lotoSources": "Energy Sources Isolated",
+  "steps": "Job Steps, Hazards & Controls",
+  "reflection": "Daily Risk Reflection",
+  "signoff": "Sign-Off"
+ },
+ "header": [
+  {
+   "key": "jsaTech",
+   "label": "Technician",
+   "kind": "tech"
+  },
+  {
+   "key": "jsaDate",
+   "label": "Date / Time",
+   "kind": "datetime",
+   "req": true
+  },
+  {
+   "key": "jsaSite",
+   "label": "Mine Site / Location",
+   "kind": "text",
+   "req": true
+  },
+  {
+   "key": "jsaEquipment",
+   "label": "Equipment / Asset Involved",
+   "kind": "unit"
+  },
+  {
+   "key": "jsaTaskDesc",
+   "label": "Task Description",
+   "kind": "textarea",
+   "req": true
+  },
+  {
+   "key": "jsaCrew",
+   "label": "Crew Members Present",
+   "kind": "text"
+  }
+ ],
+ "hazards": [
+  {
+   "key": "stored_energy",
+   "label": "Stored Energy — Hydraulic / Pneumatic / Spring / Gravity"
+  },
+  {
+   "key": "electrical",
+   "label": "Electrical Hazards"
+  },
+  {
+   "key": "pinch",
+   "label": "Pinch Points / Caught-In or Between"
+  },
+  {
+   "key": "lineoffire",
+   "label": "Line of Fire / Overhead Hazards"
+  },
+  {
+   "key": "heights",
+   "label": "Fall from Height / Elevated Work",
+   "permit": "heights"
+  },
+  {
+   "key": "hotwork",
+   "label": "Hot Work (Welding / Cutting / Grinding)",
+   "permit": "hotwork"
+  },
+  {
+   "key": "confined",
+   "label": "Confined Space Entry",
+   "permit": "confined"
+  },
+  {
+   "key": "chemical",
+   "label": "Chemical / Hazardous Materials Exposure"
+  },
+  {
+   "key": "noise",
+   "label": "Noise Exposure"
+  },
+  {
+   "key": "heatcold",
+   "label": "Heat / Cold Stress (Environmental)"
+  },
+  {
+   "key": "lifting",
+   "label": "Lifting / Ergonomic Strain"
+  },
+  {
+   "key": "ground",
+   "label": "Ground Conditions / Mobile Equipment Traffic"
+  }
+ ],
+ "controlsPrompt": "Controls / precautions (required if YES)",
+ "permits": {
+  "hotwork": {
+   "title": "Hot Work Permit",
+   "fields": [
+    {
+     "key": "hwLocation",
+     "label": "Location of Hot Work",
+     "kind": "text",
+     "req": true
+    },
+    {
+     "key": "hwDescription",
+     "label": "Description of Work",
+     "kind": "text",
+     "req": true
+    },
+    {
+     "key": "hwExtinguisher",
+     "label": "Fire extinguisher on site & charged",
+     "kind": "check",
+     "req": true
+    },
+    {
+     "key": "hwCombustiblesCleared",
+     "label": "Area cleared of combustibles within 35 ft",
+     "kind": "check",
+     "req": true
+    },
+    {
+     "key": "hwFireWatch",
+     "label": "Fire watch assigned during and 30 min after work",
+     "kind": "check",
+     "req": true
+    },
+    {
+     "key": "hwFireWatchName",
+     "label": "Fire Watch Name",
+     "kind": "text",
+     "req": true
+    },
+    {
+     "key": "hwGasTested",
+     "label": "Gas/Atmosphere Tested (if enclosed area)",
+     "kind": "select",
+     "options": [
+      {
+       "value": "na",
+       "label": "N/A"
+      },
+      {
+       "value": "yes",
+       "label": "Yes"
+      },
+      {
+       "value": "no",
+       "label": "No"
+      }
+     ]
+    },
+    {
+     "key": "hwValidFrom",
+     "label": "Permit Valid From",
+     "kind": "time",
+     "req": true
+    },
+    {
+     "key": "hwValidTo",
+     "label": "Permit Valid To",
+     "kind": "time",
+     "req": true
+    },
+    {
+     "key": "hwAuthorizedBy",
+     "label": "Authorized By",
+     "kind": "text",
+     "req": true
+    }
+   ]
+  },
+  "heights": {
+   "title": "Working at Heights Permit",
+   "fields": [
+    {
+     "key": "hpHeight",
+     "label": "Height of Work (ft)",
+     "kind": "text",
+     "req": true
+    },
+    {
+     "key": "hpMethod",
+     "label": "Fall Protection Method",
+     "kind": "select",
+     "req": true,
+     "options": [
+      {
+       "value": "pfas",
+       "label": "Personal Fall Arrest System (harness/lanyard)"
+      },
+      {
+       "value": "guardrails",
+       "label": "Guardrails"
+      },
+      {
+       "value": "net",
+       "label": "Safety Net"
+      },
+      {
+       "value": "controlzone",
+       "label": "Warning Line / Controlled Access Zone"
+      }
+     ]
+    },
+    {
+     "key": "hpAnchorDescription",
+     "label": "Anchor Point Description / Location",
+     "kind": "text",
+     "group": "Anchor Point",
+     "req": true
+    },
+    {
+     "key": "hpAnchorRated",
+     "label": "Anchor point inspected and confirmed rated for at least 5,000 lbs",
+     "kind": "check",
+     "group": "Anchor Point",
+     "req": true
+    },
+    {
+     "key": "hpHarness1",
+     "label": "Webbing — no cuts, frays, burns, or chemical damage",
+     "kind": "check",
+     "group": "Harness Inspection",
+     "req": true
+    },
+    {
+     "key": "hpHarness2",
+     "label": "Stitching intact, no pulled or broken threads",
+     "kind": "check",
+     "group": "Harness Inspection",
+     "req": true
+    },
+    {
+     "key": "hpHarness3",
+     "label": "D-rings — no cracks, distortion, or excessive wear",
+     "kind": "check",
+     "group": "Harness Inspection",
+     "req": true
+    },
+    {
+     "key": "hpHarness4",
+     "label": "Buckles / friction buckles function properly",
+     "kind": "check",
+     "group": "Harness Inspection",
+     "req": true
+    },
+    {
+     "key": "hpHarness5",
+     "label": "Labels/tags legible (capacity, manufacture date)",
+     "kind": "check",
+     "group": "Harness Inspection",
+     "req": true
+    },
+    {
+     "key": "hpHarness6",
+     "label": "Snap hooks / carabiners — gate closes and locks properly",
+     "kind": "check",
+     "group": "Harness Inspection",
+     "req": true
+    },
+    {
+     "key": "hpRescuePlanText",
+     "label": "Describe the rescue plan for this task",
+     "kind": "textarea",
+     "group": "Rescue Plan",
+     "req": true
+    },
+    {
+     "key": "hpWindSpeed",
+     "label": "Wind Speed (mph)",
+     "kind": "text",
+     "group": "Weather / Wind Conditions"
+    },
+    {
+     "key": "hpWeatherConditions",
+     "label": "Weather Conditions",
+     "kind": "text",
+     "group": "Weather / Wind Conditions"
+    },
+    {
+     "key": "hpAuthorizedBy",
+     "label": "Authorized By",
+     "kind": "text",
+     "req": true
+    }
+   ]
+  },
+  "confined": {
+   "title": "Confined Space Entry Permit",
+   "fields": [
+    {
+     "key": "csSpaceName",
+     "label": "Space Name / Identification",
+     "kind": "text",
+     "req": true
+    },
+    {
+     "key": "csEntrants",
+     "label": "Number of Entrants",
+     "kind": "number",
+     "req": true
+    },
+    {
+     "key": "csOxygen",
+     "label": "Oxygen %",
+     "kind": "text",
+     "group": "Atmospheric Testing",
+     "req": true
+    },
+    {
+     "key": "csLEL",
+     "label": "LEL %",
+     "kind": "text",
+     "group": "Atmospheric Testing",
+     "req": true
+    },
+    {
+     "key": "csCO",
+     "label": "CO (ppm)",
+     "kind": "text",
+     "group": "Atmospheric Testing",
+     "req": true
+    },
+    {
+     "key": "csH2S",
+     "label": "H2S (ppm)",
+     "kind": "text",
+     "group": "Atmospheric Testing",
+     "req": true
+    },
+    {
+     "key": "csVentilation",
+     "label": "Continuous ventilation in place",
+     "kind": "check",
+     "req": true
+    },
+    {
+     "key": "csSupervisor",
+     "label": "Entry Supervisor",
+     "kind": "text",
+     "req": true
+    },
+    {
+     "key": "csAttendant",
+     "label": "Attendant (outside space)",
+     "kind": "text",
+     "req": true
+    },
+    {
+     "key": "csRescueReady",
+     "label": "Rescue/retrieval equipment ready",
+     "kind": "check",
+     "req": true
+    },
+    {
+     "key": "csCommMethod",
+     "label": "Communication Method",
+     "kind": "text",
+     "req": true
+    },
+    {
+     "key": "csValidFrom",
+     "label": "Permit Valid From",
+     "kind": "time",
+     "req": true
+    },
+    {
+     "key": "csValidTo",
+     "label": "Permit Valid To",
+     "kind": "time",
+     "req": true
+    }
+   ]
+  }
+ },
+ "permitOrder": [
+  "hotwork",
+  "heights",
+  "confined"
+ ],
+ "ppe": [
+  "Hard hat",
+  "Safety glasses / goggles",
+  "Hearing protection",
+  "High-visibility clothing",
+  "Steel-toe / composite-toe boots",
+  "Work gloves (task-appropriate)",
+  "Fall protection harness & lanyard",
+  "Respiratory protection",
+  "Face shield",
+  "Fire-resistant clothing",
+  "Seat belt (if operating mobile equipment)"
+ ],
+ "loto": {
+  "fields": [
+   {
+    "key": "lotoRequired",
+    "label": "Is Lockout/Tagout required for this task?",
+    "kind": "select",
+    "options": [
+     {
+      "value": "no",
+      "label": "No"
+     },
+     {
+      "value": "yes",
+      "label": "Yes"
+     }
+    ]
+   },
+   {
+    "key": "lotoZeroEnergy",
+    "label": "Zero energy state verified before work begins",
+    "kind": "check",
+    "whenLoto": true,
+    "req": true
+   },
+   {
+    "key": "lotoAppliedBy",
+    "label": "Locks/Tags Applied By",
+    "kind": "text",
+    "whenLoto": true,
+    "req": true
+   },
+   {
+    "key": "lotoLockCount",
+    "label": "# of Locks/Tags Applied",
+    "kind": "number",
+    "whenLoto": true,
+    "req": true
+   }
+  ],
+  "sources": [
+   "Electrical",
+   "Hydraulic",
+   "Pneumatic",
+   "Mechanical / Gravity",
+   "Thermal / Stored Pressure"
+  ]
+ },
+ "steps": {
+  "minRows": 2,
+  "columns": [
+   {
+    "key": "desc",
+    "label": "Job Step Description",
+    "placeholder": "e.g. Remove hydraulic hose from cylinder"
+   },
+   {
+    "key": "haz",
+    "label": "Potential Hazards",
+    "placeholder": "e.g. Residual hydraulic pressure, hot fluid"
+   },
+   {
+    "key": "ctl",
+    "label": "Controls / PPE Needed",
+    "placeholder": "e.g. Bleed pressure fully, wear face shield & gloves"
+   }
+  ]
+ },
+ "reflection": {
+  "key": "mostDangerousTask",
+  "label": "What's the most dangerous task of your day?",
+  "kind": "textarea",
+  "req": true
+ },
+ "signoff": [
+  {
+   "key": "preparedBy",
+   "label": "JSA Prepared By (typed signature)",
+   "kind": "text",
+   "req": true
+  },
+  {
+   "key": "supervisorReview",
+   "label": "Supervisor / Competent Person Review (optional)",
+   "kind": "text"
+  },
+  {
+   "key": "crewAckCheck",
+   "label": "All crew members listed above were present for this JSA review and understand the hazards and controls identified.",
+   "kind": "check",
+   "req": true
+  }
+ ]
+}

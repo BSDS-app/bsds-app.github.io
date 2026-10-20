@@ -28,6 +28,15 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 const server = http.createServer((req, res) => {
   const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]));
   const file = fs.existsSync(p) && fs.statSync(p).isDirectory() ? path.join(p, 'index.html') : p;
+  /* The app icons live at the SITE root, one level above /app/, which is
+     where they really are in production. The harness serves this folder as
+     the root, so stand them in rather than let the app look broken. */
+  if (/icon-\d+\.png$/.test(file)) {
+    res.writeHead(200, { 'content-type': 'image/png' });
+    res.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAA'
+      + 'C0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64'));
+    return;
+  }
   if (!file.startsWith(ROOT) || !fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
   let body = fs.readFileSync(file);
   if (path.basename(file) === 'config.js') {

@@ -23,6 +23,15 @@ let legacyCleared = false;
 const server = http.createServer((req, res) => {
   const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]));
   const file = fs.existsSync(p) && fs.statSync(p).isDirectory() ? path.join(p, 'index.html') : p;
+  /* The app icons live at the SITE root, one level above /app/, which is
+     where they really are in production. The harness serves this folder as
+     the root, so stand them in rather than let the app look broken. */
+  if (/icon-\d+\.png$/.test(file)) {
+    res.writeHead(200, { 'content-type': 'image/png' });
+    res.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAA'
+      + 'C0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64'));
+    return;
+  }
   if (!file.startsWith(ROOT) || !fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
   let body = fs.readFileSync(file);
   if (path.basename(file) === 'config.js') {
@@ -139,7 +148,7 @@ for (const size of [{ width: 390, height: 800 }, { width: 1200, height: 900 }]) 
   ok(over <= 1, `${tag} tech home does not scroll sideways`, String(over));
 
   // the matrix, as the tech sees it
-  await page.locator('[data-go="perms"]').click();
+  await page.locator('.list .row[data-go="perms"], .bar [data-go="perms"]').click();
   await page.waitForTimeout(300);
   // HARD_RULES holds five refusals across four capabilities - personnel is
   // refused to both tech and office - so the cells are what to count.
@@ -207,7 +216,7 @@ for (const size of [{ width: 390, height: 800 }, { width: 1200, height: 900 }]) 
     `${tag} landing back on the tiles`);
 
   // --- machines -----------------------------------------------------
-  await page.locator('[data-go="equipment"]').click();
+  await page.locator('.list .row[data-go="equipment"], .bar [data-go="equipment"]').click();
   await page.waitForTimeout(400);
   const custRows = await page.locator('[data-cust]').count();
   ok(custRows === customers.length, `${tag} every customer is listed`,
@@ -221,7 +230,7 @@ for (const size of [{ width: 390, height: 800 }, { width: 1200, height: 900 }]) 
   const spec = await page.locator('.spec').textContent();
   ok(/70165/.test(spec) && /Epiroc/i.test(spec),
     `${tag} the machine page shows what is on the record`, spec.replace(/\s+/g, ' ').slice(0, 90));
-  ok(await page.locator('.tile b').first().textContent() === 'Parts book',
+  ok((await page.locator('.tile b').first().textContent()) === 'Parts book',
     `${tag} 70165 offers its parts book`);
 
   // a machine with no serial must say so rather than offer a wrong book
@@ -249,7 +258,7 @@ for (const size of [{ width: 390, height: 800 }, { width: 1200, height: 900 }]) 
   ok(tiles.includes('Parts Rebuild Order'), `${tag} office: rebuild order tile`);
   ok(!tiles.includes('Command Center'),
     `${tag} office: NO Command Center tile \u2014 Mike and Stew only`, tiles.join(', '));
-  await page.locator('[data-go="perms"]').click();
+  await page.locator('.list .row[data-go="perms"], .bar [data-go="perms"]').click();
   await page.waitForTimeout(300);
   const officeHr = await page.evaluate(() => {
     const row = [...document.querySelectorAll('tbody tr')]
@@ -269,7 +278,7 @@ for (const size of [{ width: 390, height: 800 }, { width: 1200, height: 900 }]) 
   ok(nav.includes('Logs'), `${tag} owner: logs`);
   ok(nav.includes('Machines') && nav.includes('Parts books'), `${tag} owner: everything else`);
   ok((await tileTitles()).includes('Command Center'), `${tag} owner: Command Center`);
-  await page.locator('[data-go="people"]').click();
+  await page.locator('.list .row[data-go="people"], .bar [data-go="people"]').click();
   await page.waitForTimeout(700);
   // People is its own screen now - test/people.test.mjs works it properly.
   // What belongs here is only that an owner reaches it and sees real rows.
@@ -315,7 +324,7 @@ for (const size of [{ width: 390, height: 800 }, { width: 1200, height: 900 }]) 
     await page.waitForTimeout(300);
     await page.locator(`[data-demo="${uid}"]`).click();
     await page.waitForTimeout(450);
-    const lg = page.locator('.tile.legacy');
+    const lg = page.locator('[data-tool="__legacy"]');
     ok(await lg.count() === 1, `${tag} ${uid}: the Launcher is still reachable`);
     // it is on our own site, so it opens inside the app like the rest
     ok(await lg.evaluate(e => e.tagName) === 'BUTTON',
@@ -328,7 +337,7 @@ for (const size of [{ width: 390, height: 800 }, { width: 1200, height: 900 }]) 
     await page.locator('#back').click();
     await page.waitForTimeout(350);
   }
-  await page.locator('[data-go="perms"]').click();
+  await page.locator('.list .row[data-go="perms"], .bar [data-go="perms"]').click();
   await page.waitForTimeout(350);
   const warned = (await page.locator('.note.warn').allTextContents()).join(' ');
   ok(/no sign-in/i.test(warned),
@@ -344,9 +353,9 @@ for (const size of [{ width: 390, height: 800 }, { width: 1200, height: 900 }]) 
   await page.waitForTimeout(400);
   await page.locator('[data-demo="demo-mike"]').click();
   await page.waitForTimeout(450);
-  ok(await page.locator('.tile.legacy').count() === 0,
+  ok(await page.locator('[data-tool="__legacy"]').count() === 0,
     `${tag} clearing legacy.url removes the Launcher tile`);
-  await page.locator('[data-go="perms"]').click();
+  await page.locator('.list .row[data-go="perms"], .bar [data-go="perms"]').click();
   await page.waitForTimeout(350);
   const after = (await page.locator('.note.warn').allTextContents()).join(' ');
   ok(!/no sign-in/i.test(after),

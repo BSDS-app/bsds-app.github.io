@@ -26,6 +26,15 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 const server = http.createServer((req, res) => {
   const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]));
   const file = fs.existsSync(p) && fs.statSync(p).isDirectory() ? path.join(p, 'index.html') : p;
+  /* The app icons live at the SITE root, one level above /app/, which is
+     where they really are in production. The harness serves this folder as
+     the root, so stand them in rather than let the app look broken. */
+  if (/icon-\d+\.png$/.test(file)) {
+    res.writeHead(200, { 'content-type': 'image/png' });
+    res.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAA'
+      + 'C0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64'));
+    return;
+  }
   if (!file.startsWith(ROOT) || !fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
   let body = fs.readFileSync(file);
   if (path.basename(file) === 'config.js') {
@@ -187,7 +196,7 @@ for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) 
   await be('demo-jaz');
   n = await nav();
   ok(n.includes('Parts'), `${tag} office gets the queue`, n.join(', '));
-  await page.locator('[data-go="partsq"]').click();
+  await page.locator('.list .row[data-go="partsq"], .bar [data-go="partsq"]').click();
   await page.waitForTimeout(800);
   const spec = (await page.locator('.spec').innerText()).replace(/\s+/g, ' ');
   ok(/1 rigs down/i.test(spec), `${tag} the queue counts rigs that are down`, spec);
@@ -227,7 +236,7 @@ for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) 
 
   // ---- the request followed it -----------------------------------
   await goHome();
-  await page.locator('[data-go="partsq"]').click();
+  await page.locator('.list .row[data-go="partsq"], .bar [data-go="partsq"]').click();
   await page.waitForTimeout(800);
   const q = await page.locator('#view').innerText();
   ok(/nothing waiting to be ordered/i.test(q),

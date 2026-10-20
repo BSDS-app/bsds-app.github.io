@@ -27,6 +27,15 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 const server = http.createServer((req, res) => {
   const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]));
   const file = fs.existsSync(p) && fs.statSync(p).isDirectory() ? path.join(p, 'index.html') : p;
+  /* The app icons live at the SITE root, one level above /app/, which is
+     where they really are in production. The harness serves this folder as
+     the root, so stand them in rather than let the app look broken. */
+  if (/icon-\d+\.png$/.test(file)) {
+    res.writeHead(200, { 'content-type': 'image/png' });
+    res.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAA'
+      + 'C0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64'));
+    return;
+  }
   if (!file.startsWith(ROOT) || !fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
   let body = fs.readFileSync(file);
   if (path.basename(file) === 'config.js') {
@@ -79,12 +88,12 @@ for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) 
   const toMachines = async () => {
     if (await page.locator('#q').count()) return;
     for (let i = 0; i < 6; i++) {
-      if (await page.locator('[data-go="equipment"]').count()) break;
+      if (await page.locator('.list .row[data-go="equipment"], .bar [data-go="equipment"]').count()) break;
       if (await page.locator('#back').isHidden()) break;
       await page.locator('#back').click();
       await page.waitForTimeout(350);
     }
-    await page.locator('[data-go="equipment"]').click();
+    await page.locator('.list .row[data-go="equipment"], .bar [data-go="equipment"]').click();
     await page.waitForTimeout(600);
   };
   const setM = async (k, v) => {
@@ -102,9 +111,9 @@ for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) 
   // ---- owner: the fleet screen ------------------------------------
   await be('demo-mike');
   await toMachines();
-  ok(await page.locator('[data-go="editrig"]').count() === 1,
+  ok(await page.locator('.list .row[data-go="editrig"], .bar [data-go="editrig"]').count() === 1,
     `${tag} an owner can add a machine`);
-  ok(await page.locator('[data-go="editcust"]').count() === 1,
+  ok(await page.locator('.list .row[data-go="editcust"], .bar [data-go="editcust"]').count() === 1,
     `${tag} and a customer`);
   const warn = await page.locator('.note.warn').first().innerText();
   ok(new RegExp(BLANK + ' machines with no serial').test(warn),
@@ -117,7 +126,7 @@ for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) 
     String(await page.locator('[data-rig]').count()));
 
   // ---- adding a machine: what it refuses --------------------------
-  await page.locator('[data-go="editrig"]').click();
+  await page.locator('.list .row[data-go="editrig"], .bar [data-go="editrig"]').click();
   await page.waitForTimeout(600);
   ok(await page.locator('#mform').count() === 1, `${tag} the machine form draws`);
   await page.locator('#msave').click();
@@ -208,7 +217,7 @@ for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) 
   await toMachines();
   ok(await page.locator('[data-cust]').count() === CU.length,
     `${tag} every customer is listed`);
-  await page.locator('[data-go="editcust"]').click();
+  await page.locator('.list .row[data-go="editcust"], .bar [data-go="editcust"]').click();
   await page.waitForTimeout(600);
   await page.locator('#csave').click();
   await page.waitForTimeout(300);
@@ -248,9 +257,9 @@ for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) 
   // ---- office keeps customers, not the fleet ---------------------
   await be('demo-jaz');
   await toMachines();
-  ok(await page.locator('[data-go="editcust"]').count() === 1,
+  ok(await page.locator('.list .row[data-go="editcust"], .bar [data-go="editcust"]').count() === 1,
     `${tag} office can add a customer`);
-  ok(await page.locator('[data-go="editrig"]').count() === 0,
+  ok(await page.locator('.list .row[data-go="editrig"], .bar [data-go="editrig"]').count() === 0,
     `${tag} office cannot add a machine`);
   await page.locator('[data-cust]').first().click();
   await page.waitForTimeout(500);
@@ -266,8 +275,8 @@ for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) 
   // ---- a tech changes nothing ------------------------------------
   await be('demo-clint');
   await toMachines();
-  ok(await page.locator('[data-go="editrig"]').count() === 0
-    && await page.locator('[data-go="editcust"]').count() === 0,
+  ok(await page.locator('.list .row[data-go="editrig"], .bar [data-go="editrig"]').count() === 0
+    && await page.locator('.list .row[data-go="editcust"], .bar [data-go="editcust"]').count() === 0,
     `${tag} a tech cannot add anything`);
   await page.locator('[data-cust]').first().click();
   await page.waitForTimeout(500);

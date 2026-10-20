@@ -29,6 +29,15 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 const server = http.createServer((req, res) => {
   const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]));
   const file = fs.existsSync(p) && fs.statSync(p).isDirectory() ? path.join(p, 'index.html') : p;
+  /* The app icons live at the SITE root, one level above /app/, which is
+     where they really are in production. The harness serves this folder as
+     the root, so stand them in rather than let the app look broken. */
+  if (/icon-\d+\.png$/.test(file)) {
+    res.writeHead(200, { 'content-type': 'image/png' });
+    res.end(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAA'
+      + 'C0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64'));
+    return;
+  }
   if (!file.startsWith(ROOT) || !fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
   let body = fs.readFileSync(file);
   if (path.basename(file) === 'config.js') {
@@ -71,7 +80,7 @@ for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) 
     await page.waitForTimeout(500);
   };
   const openPeople = async () => {
-    await page.locator('[data-go="people"]').click();
+    await page.locator('.list .row[data-go="people"], .bar [data-go="people"]').click();
     await page.waitForTimeout(700);
   };
   const rowFor = (name) =>
@@ -86,7 +95,7 @@ for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) 
 
   // ---- a tech cannot reach it --------------------------------------
   await be('demo-clint');
-  ok(await page.locator('[data-go="people"]').count() === 0,
+  ok(await page.locator('.list .row[data-go="people"], .bar [data-go="people"]').count() === 0,
     `${tag} a tech has no way to People`);
   await page.evaluate(() => {
     history.pushState({}, '', location.pathname);
@@ -101,7 +110,7 @@ for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) 
 
   // ---- office cannot either ----------------------------------------
   await be('demo-jaz');
-  ok(await page.locator('[data-go="people"]').count() === 0,
+  ok(await page.locator('.list .row[data-go="people"], .bar [data-go="people"]').count() === 0,
     `${tag} office has no way to People either`);
 
   // ---- the owner's own row is the one they cannot touch ------------

@@ -13,6 +13,7 @@ import * as team from './people.js';
 import * as fleet from './fleet.js';
 import * as parts from './parts.js';
 import * as alerts from './alerts.js';
+import * as wo from './workorders.js';
 import { icon } from './icons.js';
 
 const $ = id => document.getElementById(id);
@@ -221,6 +222,11 @@ function home() {
     nav.push(['partsq', 'Parts', 'What the field is waiting on']);
   } else if (auth.allow('parts.request')) {
     nav.push(['partsmine', 'My parts requests', 'What you have asked for']);
+  }
+  if (auth.allow('wo.manage')) {
+    nav.push(['wolist', 'Work orders', 'Called in, waiting to be built']);
+  } else if (auth.allow('wo.request')) {
+    nav.push(['wolist', 'My work orders', 'What you have rung in']);
   }
   if (auth.allow('users.manage')) {
     nav.push(['people', 'People', 'Who can see what']);
@@ -552,6 +558,47 @@ async function jsaRecord(id) {
   }
 }
 
+/* ---------- work orders ------------------------------------------------ */
+/* The tech list is only readable by an owner, so it is fetched when it can
+   be and the field falls back to free text when it cannot. */
+async function woPeople() {
+  if (!auth.allow('users.manage')) return [];
+  try { return (await team.list()).users; } catch (e) { return []; }
+}
+
+async function woForm() {
+  if (!auth.allow('wo.request')) {
+    chrome('Work order', 'Not yours to raise');
+    $('view').innerHTML = '<div class="wrap"><div class="note warn"><b>Not your '
+      + 'account to use.</b> Work orders are rung in by the techs and the owners.'
+      + '</div></div>';
+    return;
+  }
+  chrome('Work order request', 'New');
+  wo.drawForm($('view'), { equipment: DATA.equipment, customers: DATA.customers,
+    people: await woPeople() });
+}
+
+async function woList() {
+  const mine = !auth.allow('wo.manage');
+  chrome(mine ? 'My work orders' : 'Work orders', mine ? 'Yours' : 'Called in');
+  $('view').innerHTML = loading;
+  try { wo.drawList($('view'), await wo.list(), { mine }); }
+  catch (e) { $('view').innerHTML = oops(e, 'read the work orders'); }
+}
+
+async function woRecord(id) {
+  chrome('Work order', 'As rung in');
+  $('view').innerHTML = loading;
+  try {
+    const r = await wo.get(id);
+    if (!r) { $('view').innerHTML = '<div class="wrap"><div class="empty">No such '
+      + 'work order.</div></div>'; return; }
+    wo.drawRecord($('view'), r,
+      { canManage: auth.allow('wo.manage'), people: await woPeople() });
+  } catch (e) { $('view').innerHTML = oops(e, 'open it'); }
+}
+
 /* ---------- parts ----------------------------------------------------- */
 const loading = '<div class="wrap"><div class="empty">Loading…</div></div>';
 const oops = (e, what) => '<div class="wrap"><div class="note warn"><b>Could not '
@@ -752,6 +799,9 @@ function draw() {
   if (v === 'preq') { partsRequest(route.arg); return; }
   if (v === 'pord') { partsOrder(route.arg); return; }
   if (v === 'pordnew') { partsOrderForm(); return; }
+  if (v === 'wo') { woForm(); return; }
+  if (v === 'wolist') { woList(); return; }
+  if (v === 'worec') { woRecord(route.arg); return; }
   if (v === 'equipment') equipment();
   else if (v === 'customer') customer(route.arg);
   else if (v === 'rig') machine(route.arg);
@@ -812,6 +862,55 @@ document.addEventListener('click', async (e) => {
       await (isJsa ? jsa : preop).setHold(route.arg, on, why);
       (isJsa ? jsaRecord : preopRecord)(route.arg);
     } catch (err) { hold.disabled = false; alertish(err); }
+    return;
+  }
+
+  /* ---- work orders ---- */
+  const wor = e.target.closest('[data-wo]');
+  if (wor) { go('worec', wor.dataset.wo); return; }
+  if (e.target.id === 'wsend') {
+    const msg = $('wmsg');
+    const out = wo.collect($('view'), { equipment: DATA.equipment,
+      customers: DATA.customers, people: await woPeople() });
+    if (out.problems) { showProblems(msg, out, $('view')); return; }
+    e.target.disabled = true;
+    msg.className = 'msg';
+    msg.textContent = 'Sending…';
+    try { go('worec', await wo.save(out.rec), true); }
+    catch (err) {
+      e.target.disabled = false;
+      msg.textContent = 'It did not send: ' + ((err && err.message) || 'unknown error');
+    }
+    return;
+  }
+  const built = e.target.closest('[data-built]');
+  if (built) {
+    const msg = $('womsg');
+    built.disabled = true;
+    try {
+      await wo.markBuilt(built.dataset.built, ($('w_so') || {}).value);
+      woRecord(built.dataset.built);
+    } catch (err) {
+      built.disabled = false;
+      msg.className = 'msg';
+      msg.textContent = (err && err.message) || 'That did not work.';
+    }
+    return;
+  }
+  const asg = e.target.closest('[data-woassign]');
+  if (asg) {
+    asg.disabled = true;
+    try {
+      await wo.assign(asg.dataset.woassign, ($('w_assign') || {}).value, await woPeople());
+      woRecord(asg.dataset.woassign);
+    } catch (err) { asg.disabled = false; alertish(err); }
+    return;
+  }
+  const wcx = e.target.closest('[data-wocancel]');
+  if (wcx) {
+    wcx.disabled = true;
+    try { await wo.cancel(wcx.dataset.wocancel); woRecord(wcx.dataset.wocancel); }
+    catch (err) { wcx.disabled = false; alertish(err); }
     return;
   }
 

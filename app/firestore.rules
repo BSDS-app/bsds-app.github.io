@@ -184,6 +184,36 @@ service cloud.firestore {
       allow read, write: if isOwner() || isOffice();
     }
 
+    /* ---- work order requests -----------------------------------------
+       Rung in by a tech or an owner; built in Fullbay by the office, who
+       put the service order number back on it.
+
+       A tech sees the ones he raised, and any an OWNER has assigned him.
+       Office cannot stamp an id on one, because office cannot read the
+       staff list - so an assignment office makes carries a name and not
+       an id, and that tech will not see it unless he raised it. A real
+       limit, written down rather than papered over; closing it means
+       letting office read the roster, which is Mike's call.
+
+       The service order number is the office's to write. A tech may
+       correct his own request while it is still open, and may never set
+       the number or move the status. */
+    match /workOrders/{id} {
+      allow create: if staff() && mine(request.resource.data)
+                    && request.resource.data.status == 'open'
+                    && request.resource.data.soNumber == '';
+      allow read:   if isOwner() || isOffice()
+                    || (isTech() && (mine(resource.data)
+                        || resource.data.assignedUid == request.auth.uid));
+      allow update: if isOwner() || isOffice()
+                    || (isTech() && mine(resource.data)
+                        && resource.data.status == 'open'
+                        && request.resource.data.status == resource.data.status
+                        && request.resource.data.soNumber == resource.data.soNumber
+                        && request.resource.data.uid == resource.data.uid);
+      allow delete: if isOwner();
+    }
+
     /* ---- shop reports ------------------------------------------------ */
     match /reports/{id} {
       allow read:  if isOwner() || isOffice();

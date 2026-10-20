@@ -46,6 +46,8 @@ export const CAPS = {
   'receipts.log':    'Read the receipts and invoices log',
   'parts.request':   'Request parts',
   'parts.order':     'Approve and build a parts order',
+  'wo.request':      'Ring in a work order request',
+  'wo.manage':       'Work the work order list and raise the service order',
   'books.view':      'Open the parts books and schematics',
   'equipment.view':  'See customers, rigs and serial numbers',
   'equipment.edit':  'Change the equipment list',
@@ -61,20 +63,20 @@ export const CAPS = {
 export const GRANTS = {
   tech: [
     'preop.submit', 'jsa.submit', 'jsa.own', 'receipts.submit',
-    'parts.request', 'books.view', 'equipment.view',
+    'parts.request', 'wo.request', 'books.view', 'equipment.view',
   ],
   office: [
     'preop.submit', 'preop.log', 'preop.correct',
     'jsa.submit', 'jsa.own', 'jsa.log',
     'receipts.submit', 'receipts.images', 'receipts.log',
-    'parts.request', 'parts.order', 'books.view',
+    'parts.request', 'parts.order', 'wo.manage', 'books.view',
     'equipment.view', 'customers.edit', 'reports.view',
   ],
   owner: [
     'preop.submit', 'preop.log', 'preop.correct', 'preop.hold',
     'jsa.submit', 'jsa.own', 'jsa.log', 'jsa.hold',
     'receipts.submit', 'receipts.images', 'receipts.log',
-    'parts.request', 'parts.order', 'books.view',
+    'parts.request', 'parts.order', 'wo.request', 'wo.manage', 'books.view',
     'equipment.view', 'equipment.edit', 'customers.edit', 'reports.view',
     'command.view', 'hr.view', 'users.manage',
   ],
@@ -102,4 +104,5 @@ export const HARD_RULES = [
   { role: 'office', cap: 'hr.view',         why: 'personnel is owners-only' },
   { role: 'tech',   cap: 'command.view',   why: 'the Command Center is Mike and Stew only' },
   { role: 'office', cap: 'command.view',   why: 'the Command Center is Mike and Stew only' },
+  { role: 'tech',   cap: 'wo.manage',       why: 'the service order number is the office\u2019s to write' },
 ];

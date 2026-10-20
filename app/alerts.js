@@ -20,6 +20,7 @@ import * as auth from './auth.js';
 import * as parts from './parts.js';
 import * as preop from './preop.js';
 import * as fleet from './fleet.js';
+import * as wo from './workorders.js';
 
 const esc = s => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -83,6 +84,35 @@ export async function gather(data) {
       if (mine.length) {
         out.push({ level: 'note', go: 'partsmine',
           text: plural(mine.length, 'parts request') + ' not ordered yet' });
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  /* Work orders somebody rang in and nobody has built yet. */
+  if (can('wo.manage')) {
+    try {
+      const open = (await wo.list()).filter(r => r.status === 'open');
+      if (open.length) {
+        out.push({ level: 'soon', go: 'wolist',
+          text: plural(open.length, 'work order') + ' to build in Fullbay',
+          why: open.map(r => r.customerName).filter(Boolean).slice(0, 3).join(', ') });
+      }
+    } catch (e) { /* ignore */ }
+  } else if (can('wo.request')) {
+    /* His end of the same loop: what he rang in, and the service order
+       number coming back - which is the only reason he opens this list. */
+    try {
+      const his = await wo.list();
+      const ready = his.filter(r => r.status === 'built' && r.soNumber);
+      if (ready.length) {
+        out.push({ level: 'note', go: 'wolist',
+          text: plural(ready.length, 'work order') + ' built',
+          why: 'SO ' + ready.map(r => r.soNumber).slice(0, 3).join(', ') });
+      }
+      const waiting = his.filter(r => r.status === 'open').length;
+      if (waiting) {
+        out.push({ level: 'note', go: 'wolist',
+          text: plural(waiting, 'work order') + ' rung in, not built yet' });
       }
     } catch (e) { /* ignore */ }
   }

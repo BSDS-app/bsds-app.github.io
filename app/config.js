@@ -97,6 +97,11 @@ export const CONFIG = {
       cap: 'parts.request', tone: 'muted', icon: 'parts',
       blurb: 'The Launcher’s Parts Order tab, until the changeover is finished',
     },
+    workorder: {
+      route: 'wo', title: 'Work Order', cap: 'wo.request',
+      tone: 'orange', icon: 'workorder',
+      blurb: 'Somebody rang in a problem',
+    },
     rebuild: {
       url: 'https://bsds-app.github.io/rebuild-forms.html', title: 'Parts Rebuild Order', cap: 'parts.order',
       tone: 'blue', icon: 'wrench',

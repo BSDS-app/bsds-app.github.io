@@ -51,6 +51,7 @@ button is not security — anybody can open the browser console.
 | `people.js` | who is on the app: invitations, roles, switching somebody off |
 | `fleet.js` | machines and customers — and the serial rule the parts books depend on |
 | `parts.js` | parts requests, orders, and receiving |
+| `workorders.js` | work order requests, and the service order number coming back |
 | `alerts.js` | the band on the home screen: what is waiting on whoever just opened it |
 | `icons.js` | the line icons on the tiles |
 | `manifest.json` | what Add to Home Screen uses: the name, the logo, the navy |
@@ -58,7 +59,7 @@ button is not security — anybody can open the browser console.
 | `forms/jsa.v1.json` | the JSA — 12 MSHA hazard categories, 3 conditional permits, 79 answerable items |
 | `forms/build_*.py` | how those files were built, and the count gates that prove no line went missing |
 | `seed/` | 15 customers and 77 rigs from the Fullbay export |
-| `test/` | 160 shell, 259 Pre-Op, 164 JSA, 88 Parts, 73 Fleet, 48 People, 34 Alerts, 97 rule, 60 emulator checks |
+| `test/` | 160 shell, 259 Pre-Op, 164 JSA, 88 Parts, 73 Fleet, 48 People, 34 Alerts, 62 Work Order, 113 rule, 193 emulator checks |
 
 Until `config.js` has a Firebase key the app runs in **demo mode**: a person
 picker instead of a sign-in form, no network, nothing written. The screens are
@@ -308,6 +309,38 @@ Buckhorn/FMC pricing — a different thing from a parts request, and they work.
 
 ---
 
+## Work orders
+
+A customer rings. Somebody raises it. The office builds it in Fullbay and the
+**service order number comes back to whoever raised it** — on his own home
+screen, without a second phone call in the other direction. That round trip
+is the whole feature; everything else on the screen is in service of it.
+
+Required: customer, location, unit or serial, the complaint, who called.
+**Not** required: the PO number and the assigned tech. A PO is often not known
+when the phone rings, and who goes is the office's call, not the caller's.
+Making either one mandatory just teaches people to type something false into
+it.
+
+The complaint is free text and stays free text. Nobody rings up with a part
+number; they ring up and say the compressor is making a noise. Their words
+beat a tidy summary, and beat a dropdown by a mile.
+
+Three states: **open** (raised, not built), **built** (it exists in Fullbay
+and carries a service order number), **cancelled**. A tech can correct his own
+while it is still open and can never write the number or move the status —
+a number a tech can type is a number the office cannot trust. That is in
+`firestore.rules`, not just the screen.
+
+**One limit, written down rather than papered over.** A tech sees the work
+orders he raised, plus any an *owner* assigned him. Office cannot stamp a
+tech's id on one, because office cannot read the staff list — so an
+assignment Jazmine makes carries his **name** but not his id, and he will not
+see it unless he raised it. Closing that means letting office read the
+roster, which is your call, not mine.
+
+---
+
 ## Machines and customers
 
 Both are edited in the app. Owners keep the fleet; owners and office keep the
@@ -407,6 +440,7 @@ node test/people.test.mjs     # roles, invitations, and the owner who cannot loc
 node test/fleet.test.mjs      # machines and customers, and every way of getting a duplicate serial past it
 node test/parts.test.mjs      # request to order to received, and the line with no part number
 node test/alerts.test.mjs     # the home band, including that a quiet shop shows nothing
+node test/workorders.test.mjs # a tech rings one in, the office builds it, the number comes back
 node test/rules.static.mjs    # roles.js and firestore.rules still agree
 ```
 
@@ -434,7 +468,8 @@ npx firebase emulators:exec --only firestore "node test/rules.test.mjs"
 That one is the real proof. It starts a Firestore, signs in as a tech, and
 tries to read the master log, the receipts, somebody else's JSA and the
 personnel file — and fails if any of them come back. It also checks a tech
-cannot promote themselves, and that an account switched off gets nothing.
+cannot promote themselves, cannot write a service order number onto his own
+work order, and that an account switched off gets nothing.
 
 ---
 

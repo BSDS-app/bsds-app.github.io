@@ -89,6 +89,17 @@ async function send(tokens, { title, body, go, level, tag }) {
   const res = await getMessaging().sendEachForMulticast(message);
   logger.info('sent', { ok: res.successCount, failed: res.failureCount });
 
+  /* WHY a send failed, not just that it did. Written after a deploy where
+     the count said 0 sent and 1 failed and there was nothing in the logs
+     to say what had gone wrong. If it fails, say so in words. */
+  res.responses.forEach((r) => {
+    if (!r.error) return;
+    logger.error('push rejected', {
+      code: r.error.code || '(none)',
+      detail: String(r.error.message || '').slice(0, 300),
+    });
+  });
+
   /* A phone that has been wiped, reinstalled or signed out leaves a token
      behind that will never work again. Pruning it here is the only place
      that can: the client cannot know, and nobody is going to go looking. */

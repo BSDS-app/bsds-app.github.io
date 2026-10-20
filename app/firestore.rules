@@ -1,0 +1,166 @@
+rules_version = '2';
+
+/* Broken Spoke - server-side permissions.
+ *
+ * This file is the real security boundary. roles.js decides what the app
+ * draws; this decides what the database will hand out. They have to agree,
+ * and test_rules.js checks that they do.
+ *
+ * A person's role lives on their own user document and only an owner can
+ * write it, so nobody can promote themselves.
+ */
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    function role() {
+      return signedIn() ? me().role : 'none';
+    }
+    function active() {
+      return signedIn() && me().active == true;
+    }
+    function isOwner()  { return active() && role() == 'owner'; }
+    function isOffice() { return active() && role() == 'office'; }
+    function isTech()   { return active() && role() == 'tech'; }
+    function staff()    { return isOwner() || isOffice() || isTech(); }
+    function mine(doc)  { return doc.uid == request.auth.uid; }
+
+    /* ---- people -----------------------------------------------------
+       You can read your own record. Owners read and write everyone's.
+       Nobody can change their own role or active flag - that is what
+       keeps the rest of this file meaningful. */
+    match /users/{uid} {
+      allow read:   if isOwner() || (signedIn() && uid == request.auth.uid);
+      allow create, delete: if isOwner();
+      allow update: if isOwner()
+                    || (signedIn() && uid == request.auth.uid
+                        && request.resource.data.role == resource.data.role
+                        && request.resource.data.active == resource.data.active);
+    }
+
+    /* ---- customers and equipment ------------------------------------
+       Everyone on staff can look a machine up - that is the point of the
+       app. Only owners restructure the list; office keeps customer
+       records current. */
+    match /customers/{id} {
+      allow read:  if staff();
+      allow write: if isOwner() || isOffice();
+    }
+    match /equipment/{id} {
+      allow read:  if staff();
+      allow write: if isOwner();
+    }
+
+    /* ---- pre-op inspections -----------------------------------------
+       A tech files one and can read back their own. The master log is
+       owners and office only.
+
+       Two extra things are enforced here that the UI also enforces, and
+       this is the half that counts:
+
+       - A record cannot be FILED already on hold. A hold is a deliberate
+         act by an owner on an existing record, not a flag a client can
+         set on the way in.
+       - Office may sign a defect off as corrected - that is what starts
+         the retention clock - but may not touch the hold, may not move
+         the inspection date, may not change whose record it is, and may
+         not restamp it with a different form version. Those four are what
+         make the record a record; only an owner changes them.
+
+       The purge itself is a Firestore TTL policy on expiresAt, which runs
+       server-side outside these rules. It skips any document whose
+       expiresAt is null - which is exactly the state a legal hold and an
+       uncorrected defect both leave the record in. The hold is not a flag
+       something has to remember to honour; it is the absence of the date
+       the deleter reads. */
+    match /preops/{id} {
+      allow create: if staff() && mine(request.resource.data)
+                    && request.resource.data.hold == false;
+      allow read:   if isOwner() || isOffice()
+                    || (isTech() && mine(resource.data));
+      allow update: if isOwner()
+                    || (isOffice()
+                        && request.resource.data.hold == resource.data.hold
+                        && request.resource.data.uid == resource.data.uid
+                        && request.resource.data.inspDate == resource.data.inspDate
+                        && request.resource.data.formVersion == resource.data.formVersion);
+      allow delete: if isOwner();
+    }
+
+    /* ---- JSAs -------------------------------------------------------
+       Same shape as the pre-ops, and the same retention protections. A
+       tech never sees the archive.
+
+       One difference from the pre-ops, on purpose: nothing about a JSA's
+       own content keeps it open. A YES on a hazard category is the JSA
+       working, not an open item - so the only thing that stops a JSA
+       being purged is a hold an owner put there, and office has no
+       business amending a signed JSA at all. */
+    match /jsas/{id} {
+      allow create: if staff() && mine(request.resource.data)
+                    && request.resource.data.hold == false;
+      allow read:   if isOwner() || isOffice()
+                    || (isTech() && mine(resource.data));
+      allow update: if isOwner();
+      allow delete: if isOwner();
+    }
+
+    /* ---- receipts and invoices --------------------------------------
+       A tech can send one in and never read one back - not the log, not
+       the image. The image itself is in Storage; storage.rules carries
+       the matching rule. */
+    match /receipts/{id} {
+      allow create: if staff() && mine(request.resource.data);
+      allow read:   if isOwner() || isOffice();
+      allow update: if isOwner() || isOffice();
+      allow delete: if isOwner();
+    }
+
+    /* ---- parts requests and orders ----------------------------------
+       Anyone on staff asks for a part and watches their own request.
+       Turning requests into an order is office and owners. */
+    match /partsRequests/{id} {
+      allow create: if staff() && mine(request.resource.data);
+      allow read:   if isOwner() || isOffice()
+                    || (isTech() && mine(resource.data));
+      allow update: if isOwner() || isOffice()
+                    || (isTech() && mine(resource.data)
+                        && request.resource.data.status == resource.data.status);
+      allow delete: if isOwner();
+    }
+    match /partsOrders/{id} {
+      allow read, write: if isOwner() || isOffice();
+    }
+
+    /* ---- shop reports ------------------------------------------------ */
+    match /reports/{id} {
+      allow read:  if isOwner() || isOffice();
+      allow write: if isOwner();
+    }
+
+    /* ---- personnel ---------------------------------------------------
+       Owners only. Not office, not techs, no exceptions. */
+    match /hr/{id} {
+      allow read, write: if isOwner();
+    }
+
+    /* ---- the parts library ------------------------------------------
+       Catalogue metadata is readable by staff; a customer, once Phase 2
+       is on, sees only books for machines on their own account. */
+    match /books/{id} {
+      allow read:  if staff();
+      allow write: if isOwner();
+    }
+
+    /* Anything not named above is closed. */
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

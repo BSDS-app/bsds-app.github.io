@@ -39,14 +39,44 @@ export const CONFIG = {
    *
    * Written absolute rather than relative so the same config works from the
    * preview, from /app/ on the Pages site, and later from a custom domain. */
+  /* How long safety paperwork is kept before it drops off by itself.
+   *
+   * 13 months, not 12. One year is what 30 CFR 56.18002(b) requires of a
+   * workplace examination record; the extra month is so nothing disappears
+   * the day it comes due, or in the middle of an audit.
+   *
+   * This is a floor, not a ceiling. A sheet with a defect on it that has not
+   * been signed off as corrected is kept past this date regardless, because
+   * 30 CFR 56.14100(d) runs on a different clock - the defect record is kept
+   * "until the defects are corrected". And an owner can put a legal hold on
+   * any record, which takes its expiry date off entirely.
+   *
+   * `formVersion` is the template a NEW sheet is filled on. Old records keep
+   * the version they were signed on and render with that, which is the whole
+   * point of versioning them: a 2026 record must not come back with rows
+   * added in 2027. */
+  retention: {
+    preop: { days: 395, label: '13 months', formVersion: 1 },
+    jsa:   { days: 395, label: '13 months', formVersion: 1 },
+  },
+
   tools: {
     preop: {
-      url: 'https://bsds-app.github.io/preop/', title: 'Pre-Op Inspection', cap: 'preop.submit',
+      route: 'preop', title: 'Pre-Op Inspection', cap: 'preop.submit',
       blurb: 'Walk-around before the shift',
     },
+    preopOld: {
+      url: 'https://bsds-app.github.io/preop/', title: 'Pre-Op (old app)',
+      cap: 'preop.submit',
+      blurb: 'The spreadsheet version, until the changeover is finished',
+    },
     jsa: {
-      url: 'https://bsds-app.github.io/jsa/', title: 'JSA', cap: 'jsa.submit',
+      route: 'jsa', title: 'JSA', cap: 'jsa.submit',
       blurb: 'Job safety analysis for the task',
+    },
+    jsaOld: {
+      url: 'https://bsds-app.github.io/jsa/', title: 'JSA (old app)', cap: 'jsa.submit',
+      blurb: 'The spreadsheet version, until the changeover is finished',
     },
     receipts: {
       url: 'https://bsds-app.github.io/', title: 'Send a Receipt', cap: 'receipts.submit',

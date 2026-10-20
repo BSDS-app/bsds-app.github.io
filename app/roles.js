@@ -35,9 +35,12 @@ export const ROLES = {
 export const CAPS = {
   'preop.submit':    'Fill in a pre-op inspection',
   'preop.log':       'Read the pre-op master log',
+  'preop.correct':   'Sign a defect off as corrected',
+  'preop.hold':      'Put a legal hold on a record so it is never purged',
   'jsa.submit':      'Fill in a JSA',
   'jsa.own':         'Read back JSAs you filed yourself',
   'jsa.log':         'Read every JSA on file',
+  'jsa.hold':        'Put a legal hold on a JSA so it is never purged',
   'receipts.submit': 'Send in a receipt or invoice',
   'receipts.images': 'Open the receipt images',
   'receipts.log':    'Read the receipts and invoices log',
@@ -61,13 +64,15 @@ export const GRANTS = {
     'parts.request', 'books.view', 'equipment.view',
   ],
   office: [
-    'preop.submit', 'preop.log', 'jsa.submit', 'jsa.own', 'jsa.log',
+    'preop.submit', 'preop.log', 'preop.correct',
+    'jsa.submit', 'jsa.own', 'jsa.log',
     'receipts.submit', 'receipts.images', 'receipts.log',
     'parts.request', 'parts.order', 'books.view',
     'equipment.view', 'customers.edit', 'reports.view',
   ],
   owner: [
-    'preop.submit', 'preop.log', 'jsa.submit', 'jsa.own', 'jsa.log',
+    'preop.submit', 'preop.log', 'preop.correct', 'preop.hold',
+    'jsa.submit', 'jsa.own', 'jsa.log', 'jsa.hold',
     'receipts.submit', 'receipts.images', 'receipts.log',
     'parts.request', 'parts.order', 'books.view',
     'equipment.view', 'equipment.edit', 'customers.edit', 'reports.view',
@@ -86,6 +91,11 @@ export function can(role, cap) {
  * stick; nothing else in the codebase is allowed to contradict it. */
 export const HARD_RULES = [
   { role: 'tech',   cap: 'preop.log',       why: 'techs must not read the master logs' },
+  { role: 'tech',   cap: 'preop.correct',   why: 'a tech does not sign off his own defect' },
+  { role: 'tech',   cap: 'preop.hold',      why: 'a legal hold is Mike and Stew only' },
+  { role: 'office', cap: 'preop.hold',      why: 'a legal hold is Mike and Stew only' },
+  { role: 'tech',   cap: 'jsa.hold',        why: 'a legal hold is Mike and Stew only' },
+  { role: 'office', cap: 'jsa.hold',        why: 'a legal hold is Mike and Stew only' },
   { role: 'tech',   cap: 'receipts.images', why: 'techs must not open receipt images' },
   { role: 'tech',   cap: 'jsa.log',         why: 'techs must not read the JSA archive' },
   { role: 'tech',   cap: 'hr.view',         why: 'personnel is owners-only' },

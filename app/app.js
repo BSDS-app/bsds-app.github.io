@@ -7,6 +7,8 @@
 import { CONFIG, DEMO } from './config.js';
 import { ROLES, CAPS, GRANTS, HARD_RULES, can } from './roles.js';
 import * as auth from './auth.js';
+import * as preop from './preop.js';
+import * as jsa from './jsa.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s)
@@ -123,7 +125,12 @@ function home() {
   const tiles = [];
   for (const [key, t] of Object.entries(CONFIG.tools)) {
     if (!auth.allow(t.cap)) continue;
-    if (!t.url) {
+    /* A tool built into the app is a route, not an address: no iframe, no
+       second site, Back works like it does everywhere else. */
+    if (t.route) {
+      tiles.push(`<button class="tile" data-go="${esc(t.route)}">`
+        + `<b>${esc(t.title)}</b><span>${esc(t.blurb)}</span></button>`);
+    } else if (!t.url) {
       tiles.push(`<div class="tile off"><b>${esc(t.title)}</b>`
         + `<span>${esc(t.blurb)}</span><em>No address configured yet</em></div>`);
     } else if (inApp(t.url)) {
@@ -157,6 +164,14 @@ function home() {
   }
   if (auth.allow('preop.log')) {
     nav.push(['logs', 'Logs', 'Pre-op, JSA, receipts']);
+  } else if (auth.allow('preop.submit')) {
+    /* A tech gets his own paperwork back and nobody else's. Not a cut-down
+       version of the master log - a different query, which the database
+       enforces whatever these lines say. */
+    nav.push(['preoplog', 'My inspections', 'The pre-ops you have filed']);
+    if (auth.allow('jsa.own')) {
+      nav.push(['jsalog', 'My JSAs', 'The JSAs you have filed']);
+    }
   }
   if (auth.allow('users.manage')) {
     nav.push(['people', 'People', 'Who can see what']);
@@ -316,12 +331,122 @@ window.addEventListener('orientationchange', sitFrameUnderBar);
 
 function logs() {
   chrome('Logs', 'Pre-op, JSA, receipts');
-  $('view').innerHTML = '<div class="wrap"><h1 class="pg">Logs</h1>'
-    + '<p class="lede">These still live in their spreadsheets behind the Apps Script '
-    + 'backends. They move into the app in the next slice; the permission rule that '
-    + 'keeps them off the techs’ accounts is already in force.</p>'
-    + '<div class="note"><b>Not wired up yet.</b> Nothing here is wrong — it is '
-    + 'the next piece of work, not a bug.</div></div>';
+  const h = ['<div class="wrap"><h1 class="pg">Logs</h1>',
+    '<p class="lede">Pre-op is in the app now and reads back as the sheet it was '
+    + 'signed on. The others are still in their spreadsheets behind the Apps Script '
+    + 'backends.</p><div class="list">'];
+  h.push('<button class="row" data-go="preoplog"><span><span class="nm">Pre-op inspections',
+    '</span><span class="sub">In the app · kept ', esc(CONFIG.retention.preop.label),
+    '</span></span><span class="ct">›</span></button>');
+  h.push('<button class="row" data-go="jsalog"><span><span class="nm">JSAs',
+    '</span><span class="sub">In the app · kept ', esc(CONFIG.retention.jsa.label),
+    '</span></span><span class="ct">›</span></button>');
+  h.push('</div>');
+  h.push('<h2 class="sec">Staying where they are</h2><div class="note">',
+    '<b>Receipts.</b> The photo lands in the Drive folder and Jazmine works out of ',
+    'the accounting folder. That is deliberate — it is not broken, and moving it ',
+    'would break it.</div>');
+  h.push('</div>');
+  $('view').innerHTML = h.join('');
+}
+
+/* ---------- pre-op --------------------------------------------------- */
+/* Drawn async because the form template is a file, not a literal in the
+   bundle. If it cannot be loaded the screen says so instead of drawing half
+   a checklist - a pre-op missing lines is worse than no pre-op. */
+let TPL = null;
+
+async function preopForm() {
+  chrome('Pre-Op Inspection', 'New sheet');
+  $('view').innerHTML = '<div class="wrap"><div class="empty">Loading the checklist…</div></div>';
+  try { TPL = await preop.template(); }
+  catch (e) {
+    $('view').innerHTML = '<div class="wrap"><div class="note warn"><b>The checklist '
+      + 'did not load.</b> Nothing is wrong with your sheet — the form itself is '
+      + 'missing, so the app will not draw a partial one. ' + esc(e.message)
+      + '</div></div>';
+    return;
+  }
+  preop.drawForm($('view'), TPL, { equipment: DATA.equipment });
+}
+
+async function preopLog() {
+  const mine = !auth.allow('preop.log');
+  chrome('Pre-op inspections', mine ? 'Yours' : 'Master log');
+  $('view').innerHTML = '<div class="wrap"><div class="empty">Loading…</div></div>';
+  try {
+    const rows = await preop.list({});
+    preop.drawLog($('view'), rows, { mine });
+  } catch (e) {
+    $('view').innerHTML = '<div class="wrap"><div class="note warn"><b>Could not read '
+      + 'the log.</b> ' + esc(e.message) + '</div></div>';
+  }
+}
+
+/* ---------- JSA ------------------------------------------------------ */
+let JTPL = null;
+
+async function jsaForm() {
+  chrome('Job Safety Analysis', 'New JSA');
+  $('view').innerHTML = '<div class="wrap"><div class="empty">Loading the form…</div></div>';
+  try { JTPL = await jsa.template(); }
+  catch (e) {
+    $('view').innerHTML = '<div class="wrap"><div class="note warn"><b>The JSA form '
+      + 'did not load.</b> Nothing is wrong with your work — the form itself is '
+      + 'missing, and a half-drawn JSA is worse than none. ' + esc(e.message)
+      + '</div></div>';
+    return;
+  }
+  jsa.drawForm($('view'), JTPL, { equipment: DATA.equipment });
+}
+
+async function jsaLog() {
+  const mine = !auth.allow('jsa.log');
+  chrome('JSAs', mine ? 'Yours' : 'Master log');
+  $('view').innerHTML = '<div class="wrap"><div class="empty">Loading…</div></div>';
+  try {
+    jsa.drawLog($('view'), await jsa.list({}), { mine });
+  } catch (e) {
+    $('view').innerHTML = '<div class="wrap"><div class="note warn"><b>Could not read '
+      + 'the log.</b> ' + esc(e.message) + '</div></div>';
+  }
+}
+
+async function jsaRecord(id) {
+  chrome('JSA', 'As signed');
+  $('view').innerHTML = '<div class="wrap"><div class="empty">Loading…</div></div>';
+  try {
+    const rec = await jsa.get(id);
+    if (!rec) {
+      $('view').innerHTML = '<div class="wrap"><div class="empty">No such JSA. '
+        + 'It may have passed its retention date.</div></div>';
+      return;
+    }
+    jsa.drawRecord($('view'), rec, { canHold: auth.allow('jsa.hold') });
+  } catch (e) {
+    $('view').innerHTML = '<div class="wrap"><div class="note warn"><b>Could not open '
+      + 'it.</b> ' + esc(e.message) + '</div></div>';
+  }
+}
+
+async function preopRecord(id) {
+  chrome('Pre-op inspection', 'As signed');
+  $('view').innerHTML = '<div class="wrap"><div class="empty">Loading…</div></div>';
+  try {
+    const rec = await preop.get(id);
+    if (!rec) {
+      $('view').innerHTML = '<div class="wrap"><div class="empty">No such inspection. '
+        + 'It may have passed its retention date.</div></div>';
+      return;
+    }
+    preop.drawRecord($('view'), rec, {
+      canCorrect: auth.allow('preop.correct'),
+      canHold: auth.allow('preop.hold'),
+    });
+  } catch (e) {
+    $('view').innerHTML = '<div class="wrap"><div class="note warn"><b>Could not open '
+      + 'it.</b> ' + esc(e.message) + '</div></div>';
+  }
 }
 
 function people() {
@@ -393,6 +518,12 @@ function draw() {
   if (!u.role) { pending(); return; }
   const v = route.view;
   if (v === 'tool') { tool(route.arg); return; }
+  if (v === 'preop') { preopForm(); return; }
+  if (v === 'preoplog') { preopLog(); return; }
+  if (v === 'preoprec') { preopRecord(route.arg); return; }
+  if (v === 'jsa') { jsaForm(); return; }
+  if (v === 'jsalog') { jsaLog(); return; }
+  if (v === 'jsarec') { jsaRecord(route.arg); return; }
   if (v === 'equipment') equipment();
   else if (v === 'customer') customer(route.arg);
   else if (v === 'rig') machine(route.arg);
@@ -415,6 +546,46 @@ document.addEventListener('click', async (e) => {
   if (c) { go('customer', c.dataset.cust); return; }
   const r = e.target.closest('[data-rig]');
   if (r) { go('rig', r.dataset.rig); return; }
+  const pr = e.target.closest('[data-preop]');
+  if (pr) { go('preoprec', pr.dataset.preop); return; }
+  const jr = e.target.closest('[data-jsa]');
+  if (jr) { go('jsarec', jr.dataset.jsa); return; }
+
+  /* ---- whichever form is on screen handles its own controls ---- */
+  if (route.view === 'preop' && preop.formClick(e, $('view'))) return;
+  if (route.view === 'jsa' && JTPL && jsa.formClick(e, $('view'), JTPL)) return;
+
+  if (e.target.id === 'psubmit') {
+    await file(e.target, 'pmsg', preop, TPL, 'preoprec', 'sheet');
+    return;
+  }
+  if (e.target.id === 'jsubmit') {
+    await file(e.target, 'jmsg', jsa, JTPL, 'jsarec', 'JSA');
+    return;
+  }
+
+  /* ---- a stored record: corrections and holds ---- */
+  const fix = e.target.closest('[data-fix]');
+  if (fix) {
+    fix.disabled = true;
+    try {
+      await preop.correct(route.arg, [Number(fix.dataset.fix)], '');
+      preopRecord(route.arg);
+    } catch (err) { fix.disabled = false; alertish(err); }
+    return;
+  }
+  const hold = e.target.closest('[data-hold]');
+  if (hold) {
+    const on = hold.dataset.hold === 'on';
+    const why = $('holdwhy') ? $('holdwhy').value.trim() : '';
+    const isJsa = route.view === 'jsarec';
+    hold.disabled = true;
+    try {
+      await (isJsa ? jsa : preop).setHold(route.arg, on, why);
+      (isJsa ? jsaRecord : preopRecord)(route.arg);
+    } catch (err) { hold.disabled = false; alertish(err); }
+    return;
+  }
 
   if (e.target.id === 'google') {
     try { await auth.signInGoogle(); }
@@ -434,6 +605,54 @@ document.addEventListener('click', async (e) => {
     } catch (err) { $('msg').className = 'msg'; $('msg').textContent = friendly(err); }
   }
 });
+/* Filing a form. Identical for both, which is why it is written once: read
+   the form, refuse it with every reason at once rather than one at a time,
+   and only navigate away once it is actually stored. */
+async function file(btn, msgId, mod, tpl, view, what) {
+  const msg = $(msgId);
+  if (!tpl) { msg.textContent = 'The form is still loading.'; return; }
+  const out = mod.collect($('view'), tpl, { equipment: DATA.equipment });
+  if (out.problems) {
+    msg.className = 'msg';
+    msg.innerHTML = out.problems.map(p => esc(p)).join('<br>');
+    msg.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    return;
+  }
+  btn.disabled = true;
+  msg.className = 'msg';
+  msg.textContent = 'Saving…';
+  try {
+    const id = await mod.save(out.rec);
+    go(view, id);
+  } catch (err) {
+    btn.disabled = false;
+    msg.textContent = 'It did not save: ' + ((err && err.message) || 'unknown error')
+      + '. Nothing was lost — the ' + what + ' is still filled in.';
+  }
+}
+
+/* The pre-op checklist is redrawn when the equipment type changes, and for
+   fall protection when the frequency does. On the JSA, changing the LOTO
+   answer opens or closes its details. */
+document.addEventListener('change', (e) => {
+  const d = e.target.dataset || {};
+  if ((d.f === 'eqType' || d.f === 'inspFrequency') && TPL) {
+    preop.drawChecklist($('view'), TPL);
+  }
+  if (d.j === 'lotoRequired' && JTPL) jsa.sync($('view'), JTPL);
+});
+
+/* No window.alert anywhere - a modal dialog freezes the page for everyone,
+   including anything driving it. Failures go on the page. */
+function alertish(err) {
+  const where = $('view').querySelector('.wrap') || $('view');
+  const n = document.createElement('div');
+  n.className = 'note warn';
+  n.innerHTML = '<b>That did not go through.</b> '
+    + esc((err && err.message) || 'unknown error');
+  where.prepend(n);
+}
+
 $('back').addEventListener('click', back);
 $('signout').addEventListener('click', async () => {
   stack.length = 0; route = { view: 'home', arg: null };

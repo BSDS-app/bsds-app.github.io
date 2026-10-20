@@ -162,6 +162,143 @@ td.yes{color:var(--ok)}
 td.no{color:var(--rule)}
 td.locked{color:var(--red)}
 
+/* ---- the pre-op form ------------------------------------------------ */
+.pform{display:block}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;
+  background:var(--card);border:1px solid var(--rule);border-radius:3px;padding:14px}
+.fld{min-width:0}
+.fld label{display:block;font:600 9.5px/1.9 var(--mono);letter-spacing:.11em;
+  text-transform:uppercase;color:var(--dim)}
+.fld input,.fld select,.fld textarea{width:100%;font:500 16px/1.25 var(--sans);
+  padding:10px 11px;background:var(--paper);color:var(--ink);
+  border:1.5px solid var(--rule);border-radius:3px}
+.fld textarea{font-size:15px;resize:vertical}
+.fld input:focus,.fld select:focus,.fld textarea:focus{outline:none;border-color:var(--mark)}
+.hint{margin:6px 0 0;font:400 11.5px/1.45 var(--sans);color:var(--dim)}
+
+.fld.wide{grid-column:1/-1}
+h3.grp{font:600 10px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;
+  color:var(--ink2);margin:16px 0 7px}
+h2.sec.warn{color:var(--red);border-bottom-color:var(--red)}
+
+/* a checkbox you can actually hit with a glove on */
+label.chk{display:flex;align-items:flex-start;gap:9px;background:var(--card);
+  border:1px solid var(--rule);border-radius:3px;padding:11px 12px;cursor:pointer}
+label.chk:hover{background:var(--sunk)}
+label.chk input{flex:none;width:20px;height:20px;margin:0;accent-color:var(--mark)}
+label.chk span{font-size:14px;line-height:1.35}
+label.chk:has(input:checked){border-color:var(--ok);box-shadow:inset 3px 0 0 var(--ok)}
+.chkgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
+
+/* a permit card: it only appears because something said YES, so it looks
+   like it means it */
+.permit{border-left:4px solid var(--red);padding-left:12px;margin:18px 0}
+.item .trig{display:block;font-style:normal;font:600 10px/1.5 var(--mono);
+  letter-spacing:.04em;color:var(--red);margin-top:4px}
+
+/* job steps */
+.steprow{background:var(--card);border:1px solid var(--rule);border-radius:3px;
+  padding:12px;margin-bottom:9px}
+.stepno{display:flex;align-items:center;justify-content:space-between;
+  font:600 10px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;
+  color:var(--dim);margin-bottom:9px}
+.stepno b{color:var(--ink);font:700 15px/1 var(--cond)}
+.mini.del{margin-top:0;padding:6px 9px;font-size:9.5px}
+.steprow .fgrid{background:none;border:0;padding:0}
+
+/* job steps on a stored record */
+.sstep{display:grid;grid-template-columns:26px 1fr;gap:10px;padding:9px 0;
+  border-bottom:1px dotted var(--rule)}
+.sstep:last-of-type{border-bottom:none}
+.sstep .n{font:700 15px/1.2 var(--cond);color:var(--dim);text-align:center}
+.sstep b{display:block;font-size:14px;line-height:1.4;margin-bottom:3px}
+.sstep span{display:block;font-size:13px;line-height:1.45;color:var(--ink2);
+  margin-top:2px}
+.sstep span i{font-style:normal;font:600 9px/1.6 var(--mono);letter-spacing:.1em;
+  text-transform:uppercase;color:var(--dim);margin-right:6px}
+.sgrid b.bad,.ssign b.bad{color:var(--red)}
+
+.items{display:flex;flex-direction:column;gap:1px;background:var(--rule);
+  border:1px solid var(--rule);border-radius:3px;overflow:hidden}
+.item{background:var(--card);padding:11px 13px;display:grid;gap:9px;
+  grid-template-columns:1fr auto;align-items:center}
+.item .itxt{font-size:14.5px;line-height:1.4;min-width:0;overflow-wrap:anywhere}
+.item .ibtn{display:flex;gap:5px;flex:none}
+.item textarea{grid-column:1/-1;width:100%;font:500 14px/1.4 var(--sans);padding:8px 10px;
+  background:var(--paper);color:var(--ink);border:1.5px solid var(--rule);border-radius:3px;
+  resize:vertical}
+.item textarea:focus{outline:none;border-color:var(--red)}
+.res{font:600 11px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;
+  padding:10px 11px;border:1.5px solid var(--rule);border-radius:3px;color:var(--dim);
+  min-width:52px}
+.res:hover{border-color:var(--ink2);color:var(--ink2)}
+/* the chosen one is unmistakable at arm's length, in sun, with gloves on */
+.res[data-result="pass"].on{background:var(--ok);border-color:var(--ok);color:#fff}
+.res[data-result="fail"].on{background:var(--red);border-color:var(--red);color:#fff}
+.res[data-result="na"].on{background:var(--ink2);border-color:var(--ink2);color:var(--paper)}
+@media (max-width:420px){
+  .item{grid-template-columns:1fr}
+  .item .ibtn{justify-content:stretch}
+  .res{flex:1}
+}
+.tally{margin:10px 0 0;font:600 11.5px/1 var(--mono);letter-spacing:.05em;color:var(--warn)}
+.tally.done{color:var(--ok)}
+#psubmit{margin-top:16px}
+
+/* ---- a stored record, drawn as the sheet it was signed on ------------ */
+.sheet{background:var(--card);border:1px solid var(--rule);border-radius:3px;
+  padding:16px;margin-bottom:4px}
+.shead{display:flex;align-items:flex-start;gap:12px;padding-bottom:13px;
+  border-bottom:2px solid var(--ink)}
+.shead div:first-child{flex:1;min-width:0}
+.shead b{display:block;font:700 23px/1.05 var(--cond);letter-spacing:.015em;
+  text-transform:uppercase}
+.shead span{font:500 9.5px/1.7 var(--mono);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--dim)}
+.stamp{flex:none;font:700 13px/1 var(--cond);letter-spacing:.16em;padding:8px 11px;
+  border:2.5px solid currentColor;border-radius:3px;transform:rotate(-3deg)}
+.stamp.pass{color:var(--ok)}
+.stamp.fail{color:var(--red)}
+.sgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:11px;
+  padding:13px 0;border-bottom:1px solid var(--rule)}
+.sgrid span{display:block;font:500 9px/1.7 var(--sans);letter-spacing:.11em;
+  text-transform:uppercase;color:var(--dim)}
+.sgrid b{font:600 14px/1.3 var(--mono);overflow-wrap:anywhere}
+.sgrid b i{font:400 13px/1.3 var(--sans);color:var(--dim)}
+h3.ssec{font:600 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink2);margin:17px 0 7px}
+.slines{display:flex;flex-direction:column}
+.sline{display:grid;grid-template-columns:62px 1fr;gap:10px;padding:7px 0;
+  border-bottom:1px dotted var(--rule);align-items:baseline}
+.sline:last-child{border-bottom:none}
+.sres{font:700 10px/1.5 var(--mono);letter-spacing:.1em;text-transform:uppercase;
+  text-align:center;border-radius:2px;padding:2px 0}
+.sline.pass .sres{color:var(--ok)}
+.sline.fail .sres{background:var(--red);color:#fff}
+.sline.na .sres{color:var(--dim)}
+.sline.blank .sres{color:var(--rule)}
+.sitem{font-size:14px;line-height:1.4;overflow-wrap:anywhere}
+.sitem em{display:block;font-style:normal;font:500 13px/1.45 var(--sans);color:var(--red);
+  margin-top:3px}
+.sitem ins{display:block;text-decoration:none;font:500 12px/1.45 var(--mono);
+  color:var(--ok);margin-top:3px}
+.sbody{font-size:14px;line-height:1.5;white-space:pre-wrap}
+.sbody i{color:var(--dim)}
+.ssign{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:11px;
+  margin-top:17px;padding-top:13px;border-top:2px solid var(--ink)}
+.ssign span{display:block;font:500 9px/1.7 var(--sans);letter-spacing:.11em;
+  text-transform:uppercase;color:var(--dim)}
+.ssign b{font:600 14px/1.3 var(--sans);overflow-wrap:anywhere}
+.mini{font:600 10.5px/1 var(--sans);letter-spacing:.07em;text-transform:uppercase;
+  padding:9px 11px;border:1.5px solid var(--rule);border-radius:3px;color:var(--ink2);
+  margin-top:9px;flex:none}
+.mini:hover{background:var(--sunk);color:var(--ink)}
+.note #holdwhy{display:block;width:100%;font:500 15px/1.2 var(--sans);padding:9px 10px;
+  margin-top:9px;background:var(--paper);color:var(--ink);border:1.5px solid var(--rule);
+  border-radius:3px}
+.row .ct b.good{color:var(--ok)}
+.row .ct b.bad{color:var(--red)}
+
 .note{background:var(--card);border:1px solid var(--rule);border-left:4px solid var(--mark);
   border-radius:3px;padding:13px 15px;margin-top:16px;font-size:13.5px;color:var(--ink2)}
 .note b{color:var(--ink)}

@@ -342,3 +342,39 @@ h3.ssec{font:600 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercas
 .row.retired{opacity:.6}
 .row.retired .nm::after{content:" · retired";font:500 10px/1 var(--mono);
   letter-spacing:.08em;text-transform:uppercase;color:var(--warn)}
+
+/* ---- parts ----------------------------------------------------------- */
+.urg{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.urg .res{display:block;text-align:left;padding:12px 13px;min-width:0}
+.urg .res b{display:block;font:700 16px/1.1 var(--cond);letter-spacing:.03em;
+  text-transform:uppercase;margin-bottom:3px}
+.urg .res span{display:block;font:400 12px/1.35 var(--sans);text-transform:none;
+  letter-spacing:0;opacity:.85}
+.urg .res[data-result="down"].on{background:var(--red);border-color:var(--red);color:#fff}
+.urg .res[data-result="soon"].on{background:var(--warn);border-color:var(--warn);color:#fff}
+.urg .res[data-result="stock"].on{background:var(--ink2);border-color:var(--ink2);
+  color:var(--paper)}
+
+.partrow{background:var(--card);border:1px solid var(--rule);border-radius:3px;
+  padding:12px;margin-bottom:9px}
+.pn{display:flex;align-items:center;justify-content:space-between;
+  font:600 10px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;
+  color:var(--dim);margin-bottom:9px}
+.pn b{color:var(--ink);font:700 15px/1 var(--cond)}
+.partrow .fgrid{background:none;border:0;padding:0}
+
+/* the urgency badge on a list row */
+.upill{display:inline-block;font:700 9px/1 var(--mono);letter-spacing:.1em;
+  text-transform:uppercase;padding:4px 5px;border-radius:2px;vertical-align:1px;
+  margin-right:5px}
+.upill.down{background:var(--red);color:#fff}
+.upill.soon{background:var(--warn);color:#fff}
+.upill.stock{background:var(--sunk);color:var(--dim)}
+
+/* a queue row you can tick */
+.row.pick{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:center}
+.row.pick label.chk{border:0;background:none;padding:0}
+.row.pick label.chk span{display:none}
+.rowbtn{display:block;text-align:left;width:100%;min-width:0;font:inherit}
+.spec div.bad b{color:var(--red)}
+td i.lookup{color:var(--warn);font-style:normal;font:500 12px/1.4 var(--mono)}

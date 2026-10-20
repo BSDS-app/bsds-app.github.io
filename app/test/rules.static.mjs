@@ -95,6 +95,24 @@ ok(!/isTech\(\)/.test(jsaUpdate), 'no tech amends a filed JSA', jsaUpdate);
 ok(/allow delete: if isOwner\(\);/.test((block('jsas') || '').replace(/\s+/g, ' ')),
   'only an owner deletes a JSA by hand');
 
+/* ---- parts: a tech asks, he does not buy -----------------------------
+   The status is the whole control here. A tech may correct his own
+   request until somebody buys off it, and may never move it along. */
+const prCreate = allows(block('partsRequests'), 'create').join(' | ');
+ok(/request\.resource\.data\.status == 'open'/.test(prCreate),
+  'a parts request is filed open, never pre-ordered', prCreate);
+const prUpdate = allows(block('partsRequests'), 'update').join(' | ');
+ok(/request\.resource\.data\.status == resource\.data\.status/.test(prUpdate),
+  'a tech cannot move his own request along the statuses', prUpdate);
+ok(/resource\.data\.status == 'open'/.test(prUpdate),
+  'and cannot edit it once it has been ordered', prUpdate);
+ok(/request\.resource\.data\.orderId == resource\.data\.orderId/.test(prUpdate),
+  'nor attach it to a different order', prUpdate);
+const poAll = (block('partsOrders') || '').replace(/\s+/g, ' ');
+ok(/allow read, write: if isOwner\(\) \|\| isOffice\(\);/.test(poAll),
+  'orders are office and owners only', poAll);
+ok(!/isTech\(\)/.test(poAll), 'no tech reaches the orders', poAll);
+
 /* ---- nobody promotes themselves -------------------------------------- */
 /* The pinning lives in a named function now, so check the function says
    what it must AND that the self branch of the update rule uses it. */
@@ -162,7 +180,8 @@ Object.entries(GRANTS).forEach(([role, caps]) => {
    queries rather than trusted. */
 const idx = JSON.parse(fs.readFileSync(new URL('../firestore.indexes.json',
   import.meta.url), 'utf8'));
-[['preops', 'inspDate', '../preop.js'], ['jsas', 'jsaDate', '../jsa.js']]
+[['preops', 'inspDate', '../preop.js'], ['jsas', 'jsaDate', '../jsa.js'],
+ ['partsRequests', 'createdAt', '../parts.js']]
   .forEach(([coll, dateField, src]) => {
     const code = fs.readFileSync(new URL(src, import.meta.url), 'utf8');
     const filters = /m\.where\('uid', '==', u\.uid\)/.test(code);

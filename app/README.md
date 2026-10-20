@@ -50,11 +50,12 @@ button is not security — anybody can open the browser console.
 | `retention.js` | how long a record is kept and what stops it being deleted. One copy, shared |
 | `people.js` | who is on the app: invitations, roles, switching somebody off |
 | `fleet.js` | machines and customers — and the serial rule the parts books depend on |
+| `parts.js` | parts requests, orders, and receiving |
 | `forms/preop.v1.json` | the checklist itself — 7 equipment types, 179 lines, lifted verbatim off the old app |
 | `forms/jsa.v1.json` | the JSA — 12 MSHA hazard categories, 3 conditional permits, 79 answerable items |
 | `forms/build_*.py` | how those files were built, and the count gates that prove no line went missing |
 | `seed/` | 15 customers and 77 rigs from the Fullbay export |
-| `test/` | 160 shell, 259 Pre-Op, 149 JSA, 73 Fleet, 48 People, 89 rule, 52 emulator checks |
+| `test/` | 160 shell, 259 Pre-Op, 149 JSA, 88 Parts, 73 Fleet, 48 People, 97 rule, 60 emulator checks |
 
 Until `config.js` has a Firebase key the app runs in **demo mode**: a person
 picker instead of a sign-in form, no network, nothing written. The screens are
@@ -129,6 +130,10 @@ gcloud firestore fields ttls update expiresAt \
   --collection-group=jsas --enable-ttl --project=bsds-app
 ```
 
+Parts requests and orders are **not** on a retention clock. They are
+purchasing records, not safety paperwork, and nothing requires them to be
+destroyed.
+
 A document whose `expiresAt` is empty or null is skipped, which is exactly
 what a legal hold and an uncorrected defect leave it as. Deletion happens
 within about 24 hours of the date, and each deleted document is billed as one
@@ -165,6 +170,41 @@ pre-ops so there is one answer to the question.
 
 Both are visible on the record and counted on the log, so nothing is quietly
 being kept or quietly being dropped.
+
+---
+
+## Parts
+
+Three states and nothing clever: **open** (a tech has asked, nobody has
+bought it), **ordered** (it is on an order with a vendor and a PO against
+it), **received** (it turned up). The tech watches his own request move
+through them without having to ask anybody.
+
+The request is the tech's record; the order is the office's. They are kept
+apart on purpose — a request says *the rig needs this*, an order says *we
+bought this, from them, on that PO*. Collapsing the two leaves you unable to
+answer either "what is this rig waiting on" or "what did we actually buy last
+month". An order copies the lines as they were when it was placed, so later
+edits cannot rewrite what the record says was bought.
+
+**A line with no part number is allowed, and flagged.** Half the time the tech
+knows what the thing is and not what it is called, and forcing a number out of
+him produces a *guessed* number — worse than a description and a lookup. The
+queue counts how many need a number so the office knows there is looking-up to
+do before anybody orders. There is a test whose only job is to fail if someone
+later makes the part number required.
+
+**Down is a fact, not a priority.** A rig that is not drilling is a different
+kind of request from a shelf restock, so it sorts first, is counted on its own,
+and nothing else competes with it.
+
+Once a request is on an order the tech can no longer edit it — it has stopped
+being a request and started being part of the record of what was bought. That
+is in `firestore.rules`, not just the screen.
+
+The three **rebuild sheets** (bean pump, carousel gearbox, 30' carousel) are
+untouched. They are curated kit sheets with exploded views and Epiroc against
+Buckhorn/FMC pricing — a different thing from a parts request, and they work.
 
 ---
 
@@ -265,6 +305,7 @@ node test/preop.test.mjs      # the Pre-Op form: every line, every role, the ret
 node test/jsa.test.mjs        # the JSA: the hazard review, and the permits it refuses to skip
 node test/people.test.mjs     # roles, invitations, and the owner who cannot lock himself out
 node test/fleet.test.mjs      # machines and customers, and every way of getting a duplicate serial past it
+node test/parts.test.mjs      # request to order to received, and the line with no part number
 node test/rules.static.mjs    # roles.js and firestore.rules still agree
 ```
 

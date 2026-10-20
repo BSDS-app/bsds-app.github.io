@@ -63,7 +63,10 @@ await env.withSecurityRulesDisabled(async (c) => {
     formVersion: 1, jsaDate: new Date('2026-10-19T07:00:00Z'),
     expiresAt: new Date('2027-11-18T07:00:00Z'), permitsOpen: ['confined'] });
   await setDoc(doc(d, 'receipts/r1'), { uid: 'clint', amount: 42 });
-  await setDoc(doc(d, 'partsRequests/q1'), { uid: 'clint', status: 'open' });
+  await setDoc(doc(d, 'partsRequests/q1'), { uid: 'clint', status: 'open', orderId: '',
+    unit: '70165', lines: [{ pn: '', qty: 2, desc: '51mm button bit' }] });
+  await setDoc(doc(d, 'partsRequests/q2'), { uid: 'clint', status: 'ordered',
+    orderId: 'o1', unit: '8619', lines: [{ pn: 'R32-BIT-51', qty: 1, desc: 'Shank' }] });
   await setDoc(doc(d, 'partsOrders/o1'), { total: 1 });
   await setDoc(doc(d, 'reports/rep1'), { kind: 'ar-aging' });
   await setDoc(doc(d, 'hr/clint'), { ssnOnFile: true });
@@ -176,13 +179,10 @@ await ok('a tech cannot rewrite the equipment list', async () => {
   await assertFails(setDoc(doc(as('clint'), 'equipment/wesco-ut--70165'), { unit: 'nope' }));
 });
 await ok('a tech requests parts and watches their own request', async () => {
-  await assertSucceeds(setDoc(doc(as('clint'), 'partsRequests/q9'), { uid: 'clint', status: 'open' }));
+  await assertSucceeds(setDoc(doc(as('clint'), 'partsRequests/q9'),
+    { uid: 'clint', status: 'open', orderId: '' }));
   await assertSucceeds(getDoc(doc(as('clint'), 'partsRequests/q1')));
   await assertFails(getDoc(doc(as('clint'), 'partsOrders/o1')));
-});
-await ok('a tech cannot approve their own parts request', async () => {
-  await assertFails(setDoc(doc(as('clint'), 'partsRequests/q1'),
-    { uid: 'clint', status: 'approved' }));
 });
 
 /* ---- the JSA, and the permits on it ----------------------------------- */
@@ -225,6 +225,52 @@ await ok('only an owner deletes a JSA by hand', async () => {
   await assertFails(deleteDoc(doc(as('clint'), 'jsas/j1')));
   await assertFails(deleteDoc(doc(as('jaz'), 'jsas/j1')));
   await assertSucceeds(deleteDoc(doc(as('mike'), 'jsas/j3')));
+});
+
+/* ---- parts: a tech asks, he does not buy ------------------------------- */
+const req = (extra) => ({ uid: 'clint', status: 'open', orderId: '', unit: '70165',
+  lines: [{ pn: '', qty: 2, desc: '51mm button bit' }], ...(extra || {}) });
+
+await ok('a tech raises a request and reads his own back', async () => {
+  await assertSucceeds(setDoc(doc(as('clint'), 'partsRequests/q5'), req()));
+  await assertSucceeds(getDoc(doc(as('clint'), 'partsRequests/q1')));
+});
+await ok('a request cannot be raised already ordered', async () => {
+  await assertFails(setDoc(doc(as('clint'), 'partsRequests/q6'),
+    req({ status: 'ordered', orderId: 'o1' })));
+});
+await ok('a tech cannot mark his own request ordered', async () => {
+  await assertFails(setDoc(doc(as('clint'), 'partsRequests/q1'),
+    req({ status: 'ordered' })));
+});
+await ok('a tech cannot attach his request to an order', async () => {
+  await assertFails(setDoc(doc(as('clint'), 'partsRequests/q1'),
+    req({ orderId: 'o1' })));
+});
+await ok('a tech can fix his own request while it is still open', async () => {
+  await assertSucceeds(setDoc(doc(as('clint'), 'partsRequests/q1'),
+    req({ lines: [{ pn: 'R32-BIT-51', qty: 2, desc: '51mm button bit' }] })));
+});
+await ok('but not once it has been ordered', async () => {
+  await assertFails(setDoc(doc(as('clint'), 'partsRequests/q2'),
+    { uid: 'clint', status: 'ordered', orderId: 'o1', unit: '8619',
+      lines: [{ pn: 'CHANGED', qty: 9, desc: 'nope' }] }));
+});
+await ok('a tech cannot read another tech\u2019s request', async () => {
+  await assertFails(getDocs(collection(as('noah'), 'partsRequests')));
+  await assertFails(getDoc(doc(as('noah'), 'partsRequests/q1')));
+});
+await ok('office works the queue and the orders', async () => {
+  await assertSucceeds(getDocs(collection(as('jaz'), 'partsRequests')));
+  await assertSucceeds(setDoc(doc(as('jaz'), 'partsRequests/q1'),
+    req({ status: 'ordered', orderId: 'o9' })));
+  await assertSucceeds(setDoc(doc(as('jaz'), 'partsOrders/o9'),
+    { vendor: 'Mincon Inc.', po: 'PO-4471', status: 'placed', requestIds: ['q1'] }));
+});
+await ok('no tech goes near an order', async () => {
+  await assertFails(getDoc(doc(as('clint'), 'partsOrders/o9')));
+  await assertFails(getDocs(collection(as('clint'), 'partsOrders')));
+  await assertFails(setDoc(doc(as('clint'), 'partsOrders/o8'), { vendor: 'x' }));
 });
 
 /* ---- office ----------------------------------------------------------- */

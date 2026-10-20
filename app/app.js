@@ -11,6 +11,7 @@ import * as preop from './preop.js';
 import * as jsa from './jsa.js';
 import * as team from './people.js';
 import * as fleet from './fleet.js';
+import * as parts from './parts.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s)
@@ -19,6 +20,8 @@ const esc = s => String(s == null ? '' : s)
 let DATA = { customers: [], equipment: [] };
 let route = { view: 'home', arg: null };
 let signupMode = false;
+/* requests ticked on the parts queue, carried to the order form */
+let PICKED = [];
 const stack = [];
 
 /* ---------- data ------------------------------------------------------ */
@@ -197,6 +200,11 @@ function home() {
     if (auth.allow('jsa.own')) {
       nav.push(['jsalog', 'My JSAs', 'The JSAs you have filed']);
     }
+  }
+  if (auth.allow('parts.order')) {
+    nav.push(['partsq', 'Parts', 'What the field is waiting on']);
+  } else if (auth.allow('parts.request')) {
+    nav.push(['partsmine', 'My parts requests', 'What you have asked for']);
   }
   if (auth.allow('users.manage')) {
     nav.push(['people', 'People', 'Who can see what']);
@@ -514,6 +522,66 @@ async function jsaRecord(id) {
   }
 }
 
+/* ---------- parts ----------------------------------------------------- */
+const loading = '<div class="wrap"><div class="empty">Loading…</div></div>';
+const oops = (e, what) => '<div class="wrap"><div class="note warn"><b>Could not '
+  + esc(what) + '.</b> ' + esc((e && e.message) || 'unknown error') + '</div></div>';
+
+function partsForm() {
+  chrome('Order parts', 'New request');
+  parts.drawForm($('view'), { equipment: DATA.equipment });
+}
+
+async function partsMine() {
+  chrome('My parts requests', 'Yours');
+  $('view').innerHTML = loading;
+  try { parts.drawMine($('view'), await parts.listRequests()); }
+  catch (e) { $('view').innerHTML = oops(e, 'read your requests'); }
+}
+
+async function partsQueue() {
+  chrome('Parts', 'The queue');
+  $('view').innerHTML = loading;
+  try {
+    const [reqs, orders] = await Promise.all([parts.listRequests(), parts.listOrders()]);
+    parts.drawQueue($('view'), reqs, orders);
+  } catch (e) { $('view').innerHTML = oops(e, 'read the parts queue'); }
+}
+
+async function partsRequest(id) {
+  chrome('Parts request', 'As asked');
+  $('view').innerHTML = loading;
+  try {
+    const r = await parts.getRequest(id);
+    if (!r) { $('view').innerHTML = '<div class="wrap"><div class="empty">No such '
+      + 'request.</div></div>'; return; }
+    parts.drawRequest($('view'), r, { canOrder: auth.allow('parts.order') });
+  } catch (e) { $('view').innerHTML = oops(e, 'open it'); }
+}
+
+async function partsOrder(id) {
+  chrome('Parts order', 'Placed');
+  $('view').innerHTML = loading;
+  try {
+    const o = await parts.getOrder(id);
+    if (!o) { $('view').innerHTML = '<div class="wrap"><div class="empty">No such '
+      + 'order.</div></div>'; return; }
+    parts.drawOrder($('view'), o, { canOrder: auth.allow('parts.order') });
+  } catch (e) { $('view').innerHTML = oops(e, 'open it'); }
+}
+
+async function partsOrderForm() {
+  chrome('New order', PICKED.length + ' request' + (PICKED.length === 1 ? '' : 's'));
+  $('view').innerHTML = loading;
+  try {
+    const all = await parts.listRequests();
+    const picked = all.filter(r => PICKED.indexOf(r.id) >= 0);
+    if (!picked.length) { $('view').innerHTML = '<div class="wrap"><div class="empty">'
+      + 'Nothing picked.</div></div>'; return; }
+    parts.drawOrderForm($('view'), picked);
+  } catch (e) { $('view').innerHTML = oops(e, 'gather those requests'); }
+}
+
 /* ---------- machines and customers ----------------------------------- */
 function rigForm(arg) {
   if (!auth.allow('equipment.edit')) {
@@ -648,6 +716,12 @@ function draw() {
   if (v === 'jsarec') { jsaRecord(route.arg); return; }
   if (v === 'editrig') { rigForm(route.arg); return; }
   if (v === 'editcust') { custForm(route.arg); return; }
+  if (v === 'parts') { partsForm(); return; }
+  if (v === 'partsmine') { partsMine(); return; }
+  if (v === 'partsq') { partsQueue(); return; }
+  if (v === 'preq') { partsRequest(route.arg); return; }
+  if (v === 'pord') { partsOrder(route.arg); return; }
+  if (v === 'pordnew') { partsOrderForm(); return; }
   if (v === 'equipment') equipment();
   else if (v === 'customer') customer(route.arg);
   else if (v === 'rig') machine(route.arg);
@@ -708,6 +782,75 @@ document.addEventListener('click', async (e) => {
       await (isJsa ? jsa : preop).setHold(route.arg, on, why);
       (isJsa ? jsaRecord : preopRecord)(route.arg);
     } catch (err) { hold.disabled = false; alertish(err); }
+    return;
+  }
+
+  /* ---- parts ---- */
+  const preq = e.target.closest('[data-preq]');
+  if (preq) { go('preq', preq.dataset.preq); return; }
+  const pord = e.target.closest('[data-pord]');
+  if (pord) { go('pord', pord.dataset.pord); return; }
+  if (route.view === 'parts' && parts.formClick(e, $('view'))) return;
+
+  if (e.target.id === 'psend') {
+    const msg = $('pmsg2');
+    msg.className = 'msg';
+    const out = parts.collect($('view'), { equipment: DATA.equipment });
+    if (out.problems) {
+      msg.innerHTML = out.problems.map(x => esc(x)).join('<br>');
+      msg.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return;
+    }
+    e.target.disabled = true;
+    msg.textContent = 'Sending…';
+    try {
+      const id = await parts.save(out.rec);
+      go('preq', id, true);
+    } catch (err) {
+      e.target.disabled = false;
+      msg.textContent = 'It did not send: ' + ((err && err.message) || 'unknown error')
+        + '. Nothing was lost — the request is still filled in.';
+    }
+    return;
+  }
+  if (e.target.id === 'makeorder') {
+    PICKED = [...$('view').querySelectorAll('[data-pick]:checked')]
+      .map(b => b.dataset.pick);
+    if (!PICKED.length) return;
+    go('pordnew');
+    return;
+  }
+  if (e.target.id === 'osave') {
+    const msg = $('omsg');
+    msg.className = 'msg';
+    const form = {};
+    $('view').querySelectorAll('[data-o]').forEach(el => { form[el.dataset.o] = el.value; });
+    e.target.disabled = true;
+    msg.textContent = 'Saving…';
+    try {
+      const all = await parts.listRequests();
+      const picked = all.filter(r => PICKED.indexOf(r.id) >= 0);
+      const id = await parts.placeOrder(form, picked);
+      PICKED = [];
+      go('pord', id, true);
+    } catch (err) {
+      e.target.disabled = false;
+      msg.textContent = (err && err.message) || 'That did not work.';
+    }
+    return;
+  }
+  const rcv = e.target.closest('[data-receive]');
+  if (rcv) {
+    rcv.disabled = true;
+    try { await parts.receiveOrder(rcv.dataset.receive); partsOrder(rcv.dataset.receive); }
+    catch (err) { rcv.disabled = false; alertish(err); }
+    return;
+  }
+  const cxl = e.target.closest('[data-cancelreq]');
+  if (cxl) {
+    cxl.disabled = true;
+    try { await parts.cancelRequest(cxl.dataset.cancelreq); partsRequest(cxl.dataset.cancelreq); }
+    catch (err) { cxl.disabled = false; alertish(err); }
     return;
   }
 
@@ -884,6 +1027,18 @@ document.addEventListener('change', (e) => {
     preop.drawChecklist($('view'), TPL);
   }
   if (d.j === 'lotoRequired' && JTPL) jsa.sync($('view'), JTPL);
+  if (d.pick) {
+    const bar = $('pickbar');
+    if (bar) {
+      const n = $('view').querySelectorAll('[data-pick]:checked').length;
+      bar.hidden = n === 0;
+      const b = $('makeorder');
+      if (b) {
+        b.textContent = n === 1 ? 'Put this one on an order'
+          : 'Put these ' + n + ' on an order';
+      }
+    }
+  }
   if (d.role) {
     const sel = e.target;
     sel.disabled = true;

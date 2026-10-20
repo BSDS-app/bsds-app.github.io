@@ -163,12 +163,21 @@ service cloud.firestore {
        Anyone on staff asks for a part and watches their own request.
        Turning requests into an order is office and owners. */
     match /partsRequests/{id} {
-      allow create: if staff() && mine(request.resource.data);
+      allow create: if staff() && mine(request.resource.data)
+                    && request.resource.data.status == 'open';
       allow read:   if isOwner() || isOffice()
                     || (isTech() && mine(resource.data));
+      /* A tech may correct his own request right up until somebody buys
+         off it. Once it is on an order it has stopped being a request and
+         started being part of the record of what was bought, so it stops
+         being his to change - and he was never able to move it along the
+         statuses himself. */
       allow update: if isOwner() || isOffice()
                     || (isTech() && mine(resource.data)
-                        && request.resource.data.status == resource.data.status);
+                        && resource.data.status == 'open'
+                        && request.resource.data.status == resource.data.status
+                        && request.resource.data.orderId == resource.data.orderId
+                        && request.resource.data.uid == resource.data.uid);
       allow delete: if isOwner();
     }
     match /partsOrders/{id} {

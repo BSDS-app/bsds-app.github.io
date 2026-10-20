@@ -83,8 +83,13 @@ export const CONFIG = {
       blurb: 'On the Launcher’s Receipts tab',
     },
     partsOrder: {
-      url: 'https://bsds-app.github.io/', title: 'Order Parts', cap: 'parts.request',
-      blurb: 'On the Launcher’s Parts Order tab',
+      route: 'parts', title: 'Order Parts', cap: 'parts.request',
+      blurb: 'What the machine needs',
+    },
+    partsOld: {
+      url: 'https://bsds-app.github.io/', title: 'Order Parts (old app)',
+      cap: 'parts.request',
+      blurb: 'The Launcher’s Parts Order tab, until the changeover is finished',
     },
     rebuild: {
       url: 'https://bsds-app.github.io/rebuild-forms.html', title: 'Parts Rebuild Order', cap: 'parts.order',

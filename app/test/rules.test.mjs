@@ -374,6 +374,36 @@ await ok('office cannot restructure the equipment list', async () => {
   await assertFails(setDoc(doc(as('jaz'), 'equipment/x'), { unit: 'x' }));
 });
 
+/* ---- office and the roster ---------------------------------------------
+   Reading it is allowed; everything else about it is not. */
+await ok('office reads the roster', async () => {
+  await assertSucceeds(getDocs(collection(as('jaz'), 'users')));
+  await assertSucceeds(getDoc(doc(as('jaz'), 'users/clint')));
+});
+await ok('office cannot set anybody\u2019s role', async () => {
+  await assertFails(setDoc(doc(as('jaz'), 'users/clint'),
+    { name: 'Clint', role: 'owner', active: true, email: 'clint@bsds.local' }));
+});
+await ok('office cannot switch anybody off', async () => {
+  await assertFails(setDoc(doc(as('jaz'), 'users/clint'),
+    { name: 'Clint', role: 'tech', active: false, email: 'clint@bsds.local' }));
+});
+await ok('office cannot delete anybody', async () => {
+  await assertFails(deleteDoc(doc(as('jaz'), 'users/noah')));
+});
+await ok('office still cannot read who is being hired', async () => {
+  await assertFails(getDocs(collection(as('jaz'), 'invites')));
+  await assertFails(getDoc(doc(as('jaz'), 'invites/dale@bsds.local')));
+});
+await ok('and the personnel file is still shut to office', async () => {
+  await assertFails(getDoc(doc(as('jaz'), 'hr/clint')));
+});
+await ok('a tech reads nobody\u2019s record but his own', async () => {
+  await assertSucceeds(getDoc(doc(as('clint'), 'users/clint')));
+  await assertFails(getDoc(doc(as('clint'), 'users/noah')));
+  await assertFails(getDocs(collection(as('clint'), 'users')));
+});
+
 /* ---- nobody promotes themselves --------------------------------------- */
 await ok('a tech cannot make themselves an owner', async () => {
   await assertFails(setDoc(doc(as('clint'), 'users/clint'),

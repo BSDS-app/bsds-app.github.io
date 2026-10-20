@@ -162,6 +162,25 @@ ok(/uid == request\.auth\.uid && unchangedRoleAndActive\(\)/.test(userUpdate),
     `an owner cannot ${verb} their own record`, r);
 });
 
+/* ---- office reads the roster, and only reads it -----------------------
+   Mike opened this in Oct 2026 so that an assignment office makes lands on
+   the tech's phone. The line between reading and running it is the whole
+   point, so it is pinned from both sides. */
+const userRead = allows(block('users'), 'read').join(' | ');
+ok(/isOffice\(\)/.test(userRead), 'office reads the roster', userRead);
+ok(!/\bstaff\(\)|isTech\(\)/.test(userRead),
+  'a tech still does not get the staff list', userRead);
+ok(!/isOffice\(\)/.test(allows(block('users'), 'delete').join(' | ')),
+  'and office deletes nobody');
+ok(!/isOffice\(\)/.test(userUpdate.split('||')[0]),
+  'and office is not in the everybody-else branch of the update rule', userUpdate);
+ok(GRANTS.office.includes('users.read') && !GRANTS.office.includes('users.manage'),
+  'the matrix says office reads the roster and does not run it');
+ok(!GRANTS.tech.includes('users.read'), 'and a tech reads none of it');
+ok(/isOwner\(\)/.test(allows(block('hr'), 'read').join(' | '))
+  && !/isOffice\(\)/.test(allows(block('hr'), 'read').join(' | ')),
+  'the personnel file is a different collection and is still owners-only');
+
 /* ---- invitations are how somebody gets added -------------------------- */
 const invites = (block('invites') || '').replace(/\s+/g, ' ');
 ok(invites.length > 0, 'there is a rule block for invites');

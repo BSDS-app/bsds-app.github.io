@@ -196,6 +196,81 @@ for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) 
   ok(!/waiting/i.test(his.split('Done')[0] || ''),
     `${tag} and off his waiting pile`);
 
+  // ---- an assignment reaches a tech who did NOT ring it in ---------
+  // Mike opened the roster to office in Oct 2026 precisely so this works:
+  // Jazmine assigns Noah, and it lands on Noah's screen. Before that she
+  // could write his name and he would never see it. The assertion that
+  // matters is the LAST one - that a tech sees one he never raised.
+  await be('demo-mike');
+  await page.evaluate(() => {
+    [...document.querySelectorAll('.tile')]
+      .find(t => t.querySelector('b') && t.querySelector('b').textContent.trim() === 'Work Order')
+      .click();
+  });
+  await page.waitForTimeout(700);
+  await setW('customer', 'WESCO - UT');
+  await setW('location', 'Kennecott APEX');
+  await setW('unit', '8619');
+  await setW('complaint', 'Will not crank, no dash lights');
+  await setW('calledBy', 'Tom Campbell');
+  await page.locator('#wsend').click();
+  await page.waitForTimeout(1200);
+
+  await be('demo-jaz');
+  await page.evaluate(() => {
+    [...document.querySelectorAll('.list .row')]
+      .find(r => /work order/i.test(r.textContent)).click();
+  });
+  await page.waitForTimeout(800);
+  await page.evaluate(() => {
+    [...document.querySelectorAll('[data-wo]')]
+      .find(e => /8619/.test(e.textContent)).click();
+  });
+  await page.waitForTimeout(800);
+  ok(await page.locator('#w_assign').count() === 1,
+    `${tag} office gets an assign field on the record`);
+  /* The field is an input with a datalist rather than a dropdown, on
+     purpose: the office can still type a name that is not on the roster
+     (a new hire, a contractor) and the assignment is kept either way. What
+     the roster buys is that picking a real tech stamps his id too. */
+  const offered = await page.locator('#wtechs2 option')
+    .evaluateAll(os => os.map(o => o.value).join(','));
+  ok(/Noah/.test(offered),
+    `${tag} and the roster is offered to office, not typed blind`, offered || '(none)');
+  ok(!/Jazmine|Mike/.test(offered),
+    `${tag} and only the techs are offered`, offered);
+  await page.fill('#w_assign', 'Noah');
+  await page.evaluate(() => {
+    const b = document.querySelector('[data-woassign]');
+    if (b) b.click();
+  });
+  await page.waitForTimeout(1200);
+
+  await be('demo-noah');
+  await page.waitForTimeout(900);
+  await page.evaluate(() => {
+    const r = [...document.querySelectorAll('.list .row')]
+      .find(x => /work order/i.test(x.textContent));
+    if (r) r.click();
+  });
+  await page.waitForTimeout(900);
+  const noahs = await page.locator('#view').innerText();
+  ok(/8619/.test(noahs),
+    `${tag} THE PAYOFF: a tech sees one he never rang in, because office could `
+    + 'stamp his id on it', noahs.replace(/\s+/g, ' ').slice(0, 130));
+
+  // ---- but reading the roster is not running it --------------------
+  // Office can SEE who the techs are. Office cannot set a role, switch
+  // anybody off, or invite anybody - there is no way in from her screen at
+  // all, which is a stronger statement than a permission message.
+  await be('demo-jaz');
+  const jazTiles = (await page.locator('.tile b').allTextContents()).map(s => s.trim());
+  ok(!jazTiles.includes('People'), `${tag} office still has no People button`,
+    jazTiles.join(', '));
+  const jazNav = await nav();
+  ok(!jazNav.some(x => /people|roles/i.test(x)),
+    `${tag} and no way through to roles at all`, jazNav.join(', '));
+
   const real = errs.filter(e =>
     !/ERR_TUNNEL_CONNECTION_FAILED|fonts\.googleapis|favicon/.test(e));
   ok(real.length === 0, `${tag} no script errors`, real.slice(0, 3).join(' | '));

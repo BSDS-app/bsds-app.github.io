@@ -33,15 +33,52 @@ service cloud.firestore {
 
     /* ---- people -----------------------------------------------------
        You can read your own record. Owners read and write everyone's.
-       Nobody can change their own role or active flag - that is what
-       keeps the rest of this file meaningful. */
+
+       Three things this has to hold at once:
+
+       - Nobody changes their own role or active flag. That is what keeps
+         the rest of this file meaningful.
+       - Not even an owner changes their OWN role or active flag. An owner
+         can promote and switch off anybody else, but the one account they
+         cannot lock out is their own - so there is no sequence of clicks
+         that leaves the company with no way in. Stew can demote Mike and
+         Mike can demote Stew; neither can do it to himself.
+       - A person admitted by invitation creates their own record on first
+         sign-in, with the role the invitation says and no other. The
+         get() below fails for anybody with no invitation, and a failed
+         get() denies. */
+    function invitedAs() {
+      return get(/databases/$(database)/documents/invites/$(request.auth.token.email.lower())).data;
+    }
+    function unchangedRoleAndActive() {
+      return request.resource.data.role == resource.data.role
+          && request.resource.data.active == resource.data.active;
+    }
     match /users/{uid} {
       allow read:   if isOwner() || (signedIn() && uid == request.auth.uid);
-      allow create, delete: if isOwner();
-      allow update: if isOwner()
+      allow delete: if isOwner() && uid != request.auth.uid;
+      allow create: if (isOwner() && uid != request.auth.uid)
                     || (signedIn() && uid == request.auth.uid
-                        && request.resource.data.role == resource.data.role
-                        && request.resource.data.active == resource.data.active);
+                        && request.resource.data.active == true
+                        && request.resource.data.role == invitedAs().role);
+      allow update: if (isOwner() && uid != request.auth.uid)
+                    || (signedIn() && uid == request.auth.uid
+                        && unchangedRoleAndActive());
+    }
+
+    /* ---- invitations -------------------------------------------------
+       How somebody gets added without anyone opening the Firebase
+       console. An owner writes an invitation against an email address;
+       the person signs in; the app turns that invitation into their user
+       record and clears it.
+
+       The invited person can read and clear ONLY the invitation bearing
+       their own email address, which is also the only one that is any use
+       to them. Everyone else sees nothing here - the list of who is being
+       hired is not staff business. */
+    match /invites/{email} {
+      allow read, write: if isOwner();
+      allow read, delete: if signedIn() && email == request.auth.token.email.lower();
     }
 
     /* ---- customers and equipment ------------------------------------

@@ -48,11 +48,12 @@ button is not security — anybody can open the browser console.
 | `preop.js` | the Pre-Op form: filling one in, storing it, reading it back as the sheet |
 | `jsa.js` | the JSA, the same way — including the three permits it can open |
 | `retention.js` | how long a record is kept and what stops it being deleted. One copy, shared |
+| `people.js` | who is on the app: invitations, roles, switching somebody off |
 | `forms/preop.v1.json` | the checklist itself — 7 equipment types, 179 lines, lifted verbatim off the old app |
 | `forms/jsa.v1.json` | the JSA — 12 MSHA hazard categories, 3 conditional permits, 79 answerable items |
 | `forms/build_*.py` | how those files were built, and the count gates that prove no line went missing |
 | `seed/` | 15 customers and 77 rigs from the Fullbay export |
-| `test/` | 158 shell checks, 259 Pre-Op checks, 149 JSA checks, 70 rule checks, 40 emulator checks |
+| `test/` | 160 shell, 259 Pre-Op, 149 JSA, 48 People, 89 rule, 52 emulator checks |
 
 Until `config.js` has a Firebase key the app runs in **demo mode**: a person
 picker instead of a sign-in form, no network, nothing written. The screens are
@@ -99,22 +100,12 @@ mystery.
 `app/`, commit, push. Pages serves it at `bsds-app.github.io/app/` within a
 minute. The Launcher is not touched.
 
-**3. Make yourself an owner.** Open the app and sign in with Google — it will
-let you in and then tell you nobody has given the account a role yet. That is
-correct: a signed-in account with no `users` document gets nothing.
+**3. Make yourself an owner.** Done. This is the only account that ever has
+to be created by hand: Firestore → `users` → document ID = your UID from
+Authentication → Users, with `name`, `role: owner`, `active: true`.
 
-Firestore → Start collection → `users` → document ID = your UID from
-Authentication → Users, with three fields:
-
-```
-name    Mike Clunas
-role    owner
-active  true
-```
-
-Sign out, sign back in, and the app opens properly. Then add Stew the same
-way, Jazmine as `office`, and the techs as `tech` — once you are an owner the
-People screen does it without going near the console.
+**Everybody after you is added from the People screen** — see *Adding people*
+below. Nobody needs the console again.
 
 **4. Load the equipment.** `seed/customers.json` and `seed/equipment.json`
 import into the `customers` and `equipment` collections. A machine with no
@@ -176,6 +167,35 @@ being kept or quietly being dropped.
 
 ---
 
+## Adding people
+
+Three steps, and only the first one is yours:
+
+1. **People → Add somebody.** A name, an email address, a role. That writes
+   an *invitation*, not an account.
+2. **They open the app.** A brokenspokedrilling.com address signs in with
+   Google. Anybody else taps **First time here** and sets their own password.
+3. **The app turns the invitation into their record** on that first sign-in,
+   at the role the invitation named, and clears the invitation.
+
+Setting a password is not the same as being admitted. An account with no
+`users` record is shown the not-admitted screen and the database hands it
+nothing, so a stranger who finds the address and makes an account gets as far
+as the door and no further. What admits somebody is the invitation, and only
+an owner can write one.
+
+**Leaving is switching off, never deleting.** Their pre-ops and JSAs point
+back at their record; delete it and a signed sheet becomes paperwork nobody
+filed. Switching off is instant and reversible.
+
+**An owner cannot change their own role or switch themselves off.** Not a
+courtesy — it is the rule that means no sequence of clicks leaves the company
+locked out of its own app. Mike can demote Stew and Stew can demote Mike;
+neither can do it to himself. It is enforced in `firestore.rules`, not just
+hidden on the screen, and `test/rules.test.mjs` tries it four ways.
+
+---
+
 ## While both are up
 
 Read this once. **The permission rules only bind the new app.**
@@ -211,6 +231,7 @@ there is a test that checks both go together, so it cannot be half done.
 node test/app.test.mjs        # the shell, as each role, at phone and desktop width
 node test/preop.test.mjs      # the Pre-Op form: every line, every role, the retention rules
 node test/jsa.test.mjs        # the JSA: the hazard review, and the permits it refuses to skip
+node test/people.test.mjs     # roles, invitations, and the owner who cannot lock himself out
 node test/rules.static.mjs    # roles.js and firestore.rules still agree
 ```
 

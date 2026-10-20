@@ -68,6 +68,23 @@ await env.withSecurityRulesDisabled(async (c) => {
   await setDoc(doc(d, 'partsRequests/q2'), { uid: 'clint', status: 'ordered',
     orderId: 'o1', unit: '8619', lines: [{ pn: 'R32-BIT-51', qty: 1, desc: 'Shank' }] });
   await setDoc(doc(d, 'partsOrders/o1'), { total: 1 });
+  /* Work orders: w1 Clint rang in and nobody has built yet, w2 Noah rang in
+     and the office has put the service order number on it, w3 somebody else
+     rang in but an OWNER assigned it to Clint - which is the only way a tech
+     sees one he did not raise. */
+  await setDoc(doc(d, 'workOrders/w1'), { uid: 'clint', status: 'open', soNumber: '',
+    customerName: 'WESCO - UT', unit: '70165', location: 'Pit 3',
+    complaint: 'compressor making a noise', calledBy: 'Ray', po: '',
+    assigned: '', assignedUid: '', createdAt: new Date('2026-10-19T14:00:00Z') });
+  await setDoc(doc(d, 'workOrders/w2'), { uid: 'noah', status: 'built',
+    soNumber: 'SO-88241', customerName: 'WESCO - UT', unit: '8619',
+    location: 'Yard', complaint: 'will not crank', calledBy: 'Ray', po: '',
+    assigned: '', assignedUid: '', createdAt: new Date('2026-10-18T14:00:00Z') });
+  await setDoc(doc(d, 'workOrders/w3'), { uid: 'mike', status: 'open', soNumber: '',
+    customerName: 'WESCO - UT', unit: '9453', location: 'Pit 1',
+    complaint: 'hydraulic leak', calledBy: 'Dale', po: 'PO-7781',
+    assigned: 'Clint', assignedUid: 'clint',
+    createdAt: new Date('2026-10-19T16:00:00Z') });
   await setDoc(doc(d, 'reports/rep1'), { kind: 'ar-aging' });
   await setDoc(doc(d, 'hr/clint'), { ssnOnFile: true });
   await setDoc(doc(d, 'books/70165'), { title: 'DM45-HP 70165' });
@@ -271,6 +288,79 @@ await ok('no tech goes near an order', async () => {
   await assertFails(getDoc(doc(as('clint'), 'partsOrders/o9')));
   await assertFails(getDocs(collection(as('clint'), 'partsOrders')));
   await assertFails(setDoc(doc(as('clint'), 'partsOrders/o8'), { vendor: 'x' }));
+});
+
+/* ---- work orders: the round trip that saves a phone call ---------------
+   The point of the whole screen is the service order number coming back to
+   whoever rang the problem in. So the rules have to let a tech RAISE one
+   and READ his own, and must not let him write the number himself - a
+   number a tech can type is a number the office cannot trust. */
+const wo = (extra) => ({ uid: 'clint', status: 'open', soNumber: '',
+  customerName: 'WESCO - UT', unit: '70165', location: 'Pit 3',
+  complaint: 'compressor making a noise', calledBy: 'Ray', po: '',
+  assigned: '', assignedUid: '', createdAt: new Date(), ...(extra || {}) });
+
+await ok('a tech rings a work order in and reads his own back', async () => {
+  await assertSucceeds(setDoc(doc(as('clint'), 'workOrders/w9'), wo()));
+  await assertSucceeds(getDoc(doc(as('clint'), 'workOrders/w1')));
+});
+await ok('a work order cannot be rung in already built', async () => {
+  await assertFails(setDoc(doc(as('clint'), 'workOrders/w10'),
+    wo({ status: 'built' })));
+});
+await ok('nor with a service order number already on it', async () => {
+  await assertFails(setDoc(doc(as('clint'), 'workOrders/w11'),
+    wo({ soNumber: 'SO-00001' })));
+});
+await ok('a tech cannot write the service order number', async () => {
+  await assertFails(setDoc(doc(as('clint'), 'workOrders/w1'),
+    wo({ status: 'built', soNumber: 'SO-99999' })));
+  await assertFails(setDoc(doc(as('clint'), 'workOrders/w1'),
+    wo({ soNumber: 'SO-99999' })));
+});
+await ok('a tech can correct his own while it is still open', async () => {
+  await assertSucceeds(setDoc(doc(as('clint'), 'workOrders/w1'),
+    wo({ complaint: 'compressor knocking under load', po: 'PO-7781' })));
+});
+await ok('a tech cannot ring one in under another name', async () => {
+  await assertFails(setDoc(doc(as('clint'), 'workOrders/w12'),
+    wo({ uid: 'noah' })));
+});
+await ok('a tech cannot read one somebody else rang in', async () => {
+  await assertFails(getDoc(doc(as('noah'), 'workOrders/w1')));
+  await assertFails(getDocs(collection(as('noah'), 'workOrders')));
+});
+await ok('but he does see one an owner assigned him', async () => {
+  await assertSucceeds(getDoc(doc(as('clint'), 'workOrders/w3')));
+});
+await ok('and he cannot edit the one he was assigned', async () => {
+  await assertFails(setDoc(doc(as('clint'), 'workOrders/w3'),
+    wo({ uid: 'mike', assigned: 'Clint', assignedUid: 'clint',
+         complaint: 'not my problem' })));
+});
+await ok('office works the list and puts the number back on it', async () => {
+  await assertSucceeds(getDocs(collection(as('jaz'), 'workOrders')));
+  await assertSucceeds(setDoc(doc(as('jaz'), 'workOrders/w1'),
+    wo({ status: 'built', soNumber: 'SO-88242', builtBy: 'Jazmine' })));
+});
+await ok('an owner rings one in and works the list as well', async () => {
+  await assertSucceeds(setDoc(doc(as('mike'), 'workOrders/w13'), wo({ uid: 'mike' })));
+  await assertSucceeds(setDoc(doc(as('mike'), 'workOrders/w2'),
+    wo({ uid: 'noah', status: 'cancelled', soNumber: 'SO-88241' })));
+});
+await ok('only an owner deletes a work order', async () => {
+  await assertFails(deleteDoc(doc(as('clint'), 'workOrders/w9')));
+  await assertFails(deleteDoc(doc(as('jaz'), 'workOrders/w9')));
+  await assertSucceeds(deleteDoc(doc(as('mike'), 'workOrders/w9')));
+});
+await ok('a tech whose request is already built can no longer touch it', async () => {
+  await env.withSecurityRulesDisabled(async (c) =>
+    setDoc(doc(c.firestore(), 'workOrders/w14'),
+      wo({ status: 'built', soNumber: 'SO-77777' })));
+  await assertFails(setDoc(doc(as('clint'), 'workOrders/w14'),
+    wo({ status: 'built', soNumber: 'SO-77777', complaint: 'changed my mind' })));
+  /* reading it is the whole point, though - that is how he gets the number */
+  await assertSucceeds(getDoc(doc(as('clint'), 'workOrders/w14')));
 });
 
 /* ---- office ----------------------------------------------------------- */

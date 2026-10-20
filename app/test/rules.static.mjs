@@ -32,7 +32,8 @@ function allows(body, verb) {
 }
 
 const COLLECTIONS = ['users', 'invites', 'customers', 'equipment', 'preops', 'jsas',
-                     'receipts', 'partsRequests', 'partsOrders', 'reports', 'hr', 'books'];
+                     'receipts', 'partsRequests', 'partsOrders', 'workOrders',
+                     'reports', 'hr', 'books'];
 
 ok(/rules_version\s*=\s*'2'/.test(src), 'the rules declare version 2');
 ok(/match \/\{document=\*\*\} \{\s*allow read, write: if false;/.test(src),
@@ -113,6 +114,33 @@ ok(/allow read, write: if isOwner\(\) \|\| isOffice\(\);/.test(poAll),
   'orders are office and owners only', poAll);
 ok(!/isTech\(\)/.test(poAll), 'no tech reaches the orders', poAll);
 
+/* ---- work orders: the service order number is the office's ------------ */
+const woCreate = allows(block('workOrders'), 'create').join(' | ');
+ok(/request\.resource\.data\.status == 'open'/.test(woCreate),
+  'a work order is rung in open', woCreate);
+ok(/request\.resource\.data\.soNumber == ''/.test(woCreate),
+  'and without a service order number on it', woCreate);
+const woUpdate = allows(block('workOrders'), 'update').join(' | ');
+ok(/request\.resource\.data\.soNumber == resource\.data\.soNumber/.test(woUpdate),
+  'a tech cannot write the service order number', woUpdate);
+ok(/request\.resource\.data\.status == resource\.data\.status/.test(woUpdate),
+  'nor move it along', woUpdate);
+ok(/resource\.data\.status == 'open'/.test(woUpdate),
+  'nor edit it once it has been built', woUpdate);
+const woRead = allows(block('workOrders'), 'read').join(' | ');
+ok(/assignedUid == request\.auth\.uid/.test(woRead),
+  'a tech sees one an owner assigned him', woRead);
+ok(/mine\(resource\.data\)/.test(woRead), 'and the ones he rang in', woRead);
+ok(!/\bstaff\(\)/.test(woRead), 'but not everybody else\u2019s', woRead);
+
+/* the capability matrix has to agree about who rings one in */
+ok(GRANTS.tech.includes('wo.request') && !GRANTS.tech.includes('wo.manage'),
+  'a tech rings work orders in and does not work the list');
+ok(GRANTS.office.includes('wo.manage') && !GRANTS.office.includes('wo.request'),
+  'office works the list and does not ring them in');
+ok(GRANTS.owner.includes('wo.request') && GRANTS.owner.includes('wo.manage'),
+  'an owner does both');
+
 /* ---- nobody promotes themselves -------------------------------------- */
 /* The pinning lives in a named function now, so check the function says
    what it must AND that the self branch of the update rule uses it. */
@@ -181,7 +209,8 @@ Object.entries(GRANTS).forEach(([role, caps]) => {
 const idx = JSON.parse(fs.readFileSync(new URL('../firestore.indexes.json',
   import.meta.url), 'utf8'));
 [['preops', 'inspDate', '../preop.js'], ['jsas', 'jsaDate', '../jsa.js'],
- ['partsRequests', 'createdAt', '../parts.js']]
+ ['partsRequests', 'createdAt', '../parts.js'],
+ ['workOrders', 'createdAt', '../workorders.js']]
   .forEach(([coll, dateField, src]) => {
     const code = fs.readFileSync(new URL(src, import.meta.url), 'utf8');
     const filters = /m\.where\('uid', '==', u\.uid\)/.test(code);
@@ -195,6 +224,12 @@ const idx = JSON.parse(fs.readFileSync(new URL('../firestore.indexes.json',
     ok(!!hit, `${coll}: there is a (uid, ${dateField} desc) composite index`,
       JSON.stringify((idx.indexes || []).map(i => i.collectionGroup)));
   });
+
+/* the tech's work-order list runs TWO queries - his own and ones assigned
+   to him - so both branches need an index, not just the obvious one. */
+ok((idx.indexes || []).some(i => i.collectionGroup === 'workOrders'
+  && i.fields[0].fieldPath === 'assignedUid'),
+  'workOrders: the assigned-to-me branch has an index too');
 
 /* the CLI needs to know which project and where the files are */
 const fbj = JSON.parse(fs.readFileSync(new URL('../firebase.json', import.meta.url), 'utf8'));

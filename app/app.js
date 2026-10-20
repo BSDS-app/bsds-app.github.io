@@ -13,6 +13,7 @@ import * as team from './people.js';
 import * as fleet from './fleet.js';
 import * as parts from './parts.js';
 import * as alerts from './alerts.js';
+import { icon } from './icons.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s)
@@ -76,9 +77,19 @@ function back() {
 }
 
 /* ---------- chrome ---------------------------------------------------- */
+/* Every tile is drawn through this, so the icon column and the text column
+   cannot get out of step between one screen and another. */
+const tileFace = (title, sub, ic, extra) =>
+  icon(ic || 'grid') + '<span class="tx"><b>' + esc(title) + '</b>'
+  + '<span>' + esc(sub || '') + '</span>' + (extra || '') + '</span>';
+
 function chrome(title, sub) {
   const u = auth.currentUser();
   $('ttl').innerHTML = esc(title) + (sub ? '<small>' + esc(sub) + '</small>' : '');
+  /* the roundel sits where Back would be, so they never fight for the
+     narrow end of a phone bar */
+  const mark = $('topmark');
+  if (mark) mark.hidden = stack.length > 0;
   $('back').hidden = stack.length === 0;
   $('who').hidden = !u;
   if (u) {
@@ -93,8 +104,9 @@ function signIn() {
   $('back').hidden = true;
   $('who').hidden = true;
   const h = [];
-  h.push('<div class="signin"><div class="mark"><b>Broken Spoke</b>',
-    '<span>Drilling Solutions</span></div>');
+  h.push('<div class="signin"><div class="mark">',
+    '<img src="../icon-192.png" alt="">',
+    '<b>Broken Spoke</b><span>Drilling Solutions</span></div>');
 
   if (DEMO) {
     h.push('<div class="panel"><label>Open the app as</label>',
@@ -148,29 +160,31 @@ function pending() {
 
 function home() {
   const u = auth.currentUser();
-  chrome('Broken Spoke', u.name);
+  chrome('Broken Spoke', 'Drilling Solutions · ' + String(u.name || '').split(' ')[0]);
   /* The band is filled in after the page draws rather than before it, so a
      slow read never leaves somebody looking at a blank screen. */
   const h = ['<div class="wrap"><div id="alerts"></div>'];
 
   const tiles = [];
+  const face = (t, extra) => tileFace(t.title, t.blurb, t.icon, extra);
   for (const [key, t] of Object.entries(CONFIG.tools)) {
     if (!auth.allow(t.cap)) continue;
+    const tone = ' ' + (t.tone || 'blue');
     /* A tool built into the app is a route, not an address: no iframe, no
        second site, Back works like it does everywhere else. */
     if (t.route) {
-      tiles.push(`<button class="tile" data-go="${esc(t.route)}">`
-        + `<b>${esc(t.title)}</b><span>${esc(t.blurb)}</span></button>`);
+      tiles.push('<button class="tile' + tone + '" data-go="' + esc(t.route) + '">'
+        + face(t) + '</button>');
     } else if (!t.url) {
-      tiles.push(`<div class="tile off"><b>${esc(t.title)}</b>`
-        + `<span>${esc(t.blurb)}</span><em>No address configured yet</em></div>`);
+      tiles.push('<div class="tile off' + tone + '">'
+        + face(t, '<em>No address configured yet</em>') + '</div>');
     } else if (inApp(t.url)) {
-      tiles.push(`<button class="tile" data-tool="${esc(key)}">`
-        + `<b>${esc(t.title)}</b><span>${esc(t.blurb)}</span></button>`);
+      tiles.push('<button class="tile' + tone + '" data-tool="' + esc(key) + '">'
+        + face(t) + '</button>');
     } else {
-      tiles.push(`<a class="tile out" href="${esc(t.url)}" target="_blank" rel="noopener">`
-        + `<b>${esc(t.title)}</b><span>${esc(t.blurb)}</span>`
-        + `<em class="leaves">Opens in a new tab</em></a>`);
+      tiles.push('<a class="tile out' + tone + '" href="' + esc(t.url) + '" '
+        + 'target="_blank" rel="noopener">'
+        + face(t, '<em class="leaves">Opens in a new tab</em>') + '</a>');
     }
   }
   if (tiles.length) {
@@ -180,9 +194,8 @@ function home() {
   /* While the old Launcher is still up, everyone gets a door back to it. */
   if (CONFIG.legacy && CONFIG.legacy.url) {
     h.push('<h2 class="sec">Still running</h2><div class="tiles">',
-      `<button class="tile legacy" data-tool="__legacy">`,
-      `<b>${esc(CONFIG.legacy.title)}</b><span>${esc(CONFIG.legacy.blurb)}</span></button>`,
-      '</div>');
+      '<button class="tile muted" data-tool="__legacy">',
+      face(CONFIG.legacy), '</button></div>');
   }
 
   const nav = [];
@@ -376,9 +389,10 @@ function machine(id) {
 
   h.push('<h2 class="sec">Documentation</h2>');
   if (bk) {
-    h.push('<div class="tiles"><a class="tile" href="', esc(bk.url),
-      '" target="_blank" rel="noopener"><b>Parts book</b><span>', esc(bk.title),
-      '</span></a></div>');
+    h.push('<div class="tiles"><a class="tile blue" href="', esc(bk.url),
+      '" target="_blank" rel="noopener">',
+      tileFace('Parts book', bk.title, 'book',
+        '<em class="leaves">Opens in a new tab</em>'), '</a></div>');
   } else {
     h.push('<div class="note"><b>No parts book built for this serial yet.</b> ',
       e.serial ? 'The original is in the parts-book library; it has not been converted.'
@@ -402,12 +416,13 @@ function books() {
     '<p class="lede">What has been converted so far. Each one opens in its own tab; ',
     'they move inside the app once storage is switched on.</p>',
     '<h2 class="sec">By machine</h2><div class="tiles">'];
-  CONFIG.books.forEach(b => h.push('<a class="tile" href="', esc(b.url),
-    '" target="_blank" rel="noopener"><b>', esc(b.title), '</b><span>',
-    b.serial ? 's/n ' + esc(b.serial) : 'no serial', '</span></a>'));
+  CONFIG.books.forEach(b => h.push('<a class="tile blue" href="', esc(b.url),
+    '" target="_blank" rel="noopener">',
+    tileFace(b.title, b.serial ? 's/n ' + b.serial : 'no serial', 'book'), '</a>'));
   h.push('</div><h2 class="sec">Schematics and manuals</h2><div class="tiles">');
-  CONFIG.shelves.forEach(s => h.push('<a class="tile" href="', esc(s.url),
-    '" target="_blank" rel="noopener"><b>', esc(s.title), '</b><span>Reference</span></a>'));
+  CONFIG.shelves.forEach(s => h.push('<a class="tile teal" href="', esc(s.url),
+    '" target="_blank" rel="noopener">',
+    tileFace(s.title, 'Reference', 'book'), '</a>'));
   h.push('</div></div>');
   $('view').innerHTML = h.join('');
 }

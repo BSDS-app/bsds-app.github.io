@@ -31,6 +31,7 @@ export const CONFIG = {
     url: 'https://bsds-app.github.io/',
     title: 'Old Launcher',
     blurb: 'The tools as they were, unchanged',
+    tone: 'muted', icon: 'grid',
   },
 
   /* The tools, as they are deployed today. These are the pages themselves -
@@ -63,48 +64,57 @@ export const CONFIG = {
   tools: {
     preop: {
       route: 'preop', title: 'Pre-Op Inspection', cap: 'preop.submit',
+      tone: 'blue', icon: 'preop',
       blurb: 'Walk-around before the shift',
     },
     preopOld: {
       url: 'https://bsds-app.github.io/preop/', title: 'Pre-Op (old app)',
-      cap: 'preop.submit',
+      cap: 'preop.submit', tone: 'muted', icon: 'preop',
       blurb: 'The spreadsheet version, until the changeover is finished',
     },
     jsa: {
       route: 'jsa', title: 'JSA', cap: 'jsa.submit',
+      tone: 'orange', icon: 'jsa',
       blurb: 'Job safety analysis for the task',
     },
     jsaOld: {
       url: 'https://bsds-app.github.io/jsa/', title: 'JSA (old app)', cap: 'jsa.submit',
+      tone: 'muted', icon: 'jsa',
       blurb: 'The spreadsheet version, until the changeover is finished',
     },
     receipts: {
       url: 'https://bsds-app.github.io/', title: 'Send a Receipt', cap: 'receipts.submit',
+      tone: 'teal', icon: 'receipt',
       blurb: 'On the Launcher’s Receipts tab',
     },
     partsOrder: {
       route: 'parts', title: 'Order Parts', cap: 'parts.request',
+      tone: 'blue', icon: 'parts',
       blurb: 'What the machine needs',
     },
     partsOld: {
       url: 'https://bsds-app.github.io/', title: 'Order Parts (old app)',
-      cap: 'parts.request',
+      cap: 'parts.request', tone: 'muted', icon: 'parts',
       blurb: 'The Launcher’s Parts Order tab, until the changeover is finished',
     },
     rebuild: {
       url: 'https://bsds-app.github.io/rebuild-forms.html', title: 'Parts Rebuild Order', cap: 'parts.order',
+      tone: 'blue', icon: 'wrench',
       blurb: 'Bean pump, carousel, rotary head',
     },
     msha: {
       url: 'https://bsds-app.github.io/training-cert.html', title: 'MSHA 5000-23', cap: 'preop.submit',
+      tone: 'teal', icon: 'cert',
       blurb: 'Certificate of training',
     },
     command: {
       url: 'https://bsds-app.github.io/owners.html', title: 'Command Center', cap: 'command.view',
+      tone: 'navy', icon: 'command',
       blurb: 'Parts in motion, tasks, customers, numbers',
     },
     fullbay: {
       url: 'https://app.fullbay.com', title: 'Fullbay', cap: 'equipment.view',
+      tone: 'teal', icon: 'out',
       blurb: 'Shop management and work orders',
     },
   },

@@ -1,28 +1,40 @@
 /* Broken Spoke app shell.
-   Same palette as the parts books so the whole set reads as one system:
-   graphite bodywork, Epiroc signal yellow, the warning red off the decals. */
+   The palette is the Launcher's, sampled off it rather than guessed, so the
+   two read as one product while both are up: navy chrome, orange accent,
+   white panels on a cool grey page, and the four card colours the Launcher
+   already uses to tell one kind of tool from another. */
 :root{
-  --ink:#16191C; --ink2:#434B53; --dim:#727B84;
-  --paper:#EDEEF0; --card:#FFFFFF; --sunk:#E2E4E7; --rule:#D0D4D9;
-  --steel:#2B3138; --mark:#E8B500; --markink:#2B2100;
-  --red:#B4231F; --ok:#2C6B48; --warn:#8A5A12;
-  --hdh:54px;
+  --ink:#1B2430; --ink2:#44536A; --dim:#78859A;
+  --paper:#F5F6F8; --card:#FFFFFF; --sunk:#E9ECF1; --rule:#D5DBE4;
+  --steel:#1B3358; --steelink:#F2F5F9;
+  --mark:#E8641C; --markink:#FFFFFF;
+  --red:#C02A18; --ok:#1F8A5F; --warn:#B4600F;
+  /* the Launcher's card colours, by what a thing IS */
+  --navy:#12233C; --blue:#1E4D8C; --teal:#1F8A8C; --orange:#E8641C;
+  --r:12px;
+  --hdh:58px;
   --sans:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Arial,sans-serif;
   --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,monospace;
   --cond:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
 }
+/* Dark keeps the navy chrome - it is the brand, not a light-mode choice -
+   and lifts the cards off a deep blue-black rather than a neutral one. */
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --ink:#E6E8EB; --ink2:#B2BAC2; --dim:#858E97;
-  --paper:#101315; --card:#1A1E22; --sunk:#232830; --rule:#2E343B;
-  --steel:#C7CDD4; --mark:#F2C82E; --markink:#241B00;
-  --red:#E96A62; --ok:#6CBE8F; --warn:#D8A44F;
+  --ink:#E8ECF2; --ink2:#AFBBCC; --dim:#7E8CA0;
+  --paper:#0E1620; --card:#17212E; --sunk:#1F2B3A; --rule:#2C3A4C;
+  --steel:#13263F; --steelink:#E8EEF6;
+  --mark:#FF7A33; --markink:#1A0B00;
+  --red:#F2705C; --ok:#4FBF8B; --warn:#D9983F;
+  --navy:#0B1726; --blue:#2A66B0; --teal:#2AA3A5; --orange:#FF7A33;
   color-scheme:dark;
 }}
 :root[data-theme="dark"]{
-  --ink:#E6E8EB; --ink2:#B2BAC2; --dim:#858E97;
-  --paper:#101315; --card:#1A1E22; --sunk:#232830; --rule:#2E343B;
-  --steel:#C7CDD4; --mark:#F2C82E; --markink:#241B00;
-  --red:#E96A62; --ok:#6CBE8F; --warn:#D8A44F;
+  --ink:#E8ECF2; --ink2:#AFBBCC; --dim:#7E8CA0;
+  --paper:#0E1620; --card:#17212E; --sunk:#1F2B3A; --rule:#2C3A4C;
+  --steel:#13263F; --steelink:#E8EEF6;
+  --mark:#FF7A33; --markink:#1A0B00;
+  --red:#F2705C; --ok:#4FBF8B; --warn:#D9983F;
+  --navy:#0B1726; --blue:#2A66B0; --teal:#2AA3A5; --orange:#FF7A33;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
@@ -39,10 +51,11 @@ a{color:inherit}
 
 /* ---- top bar -------------------------------------------------------- */
 .top{position:sticky;top:env(safe-area-inset-top,0px);z-index:40;
-  background:var(--steel);color:#EDEEF0;display:flex;align-items:center;gap:10px;
-  min-height:var(--hdh);padding:0 12px}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .top{color:#15181B}}
-:root[data-theme="dark"] .top{color:#15181B}
+  background:var(--steel);color:var(--steelink);display:flex;align-items:center;
+  gap:10px;min-height:var(--hdh);padding:0 12px;
+  box-shadow:0 2px 0 rgba(232,100,28,.9)}
+.top .logo{flex:none;width:30px;height:30px;border-radius:50%;background:#fff;
+  object-fit:contain;padding:1px}
 .top .back{display:flex;align-items:center;gap:5px;font:600 13px/1 var(--sans);
   padding:9px 10px 9px 4px;margin-left:-4px;flex:none}
 .top .back svg{width:15px;height:15px}
@@ -97,23 +110,37 @@ h2.sec{font:600 11px/1 var(--mono);letter-spacing:.15em;text-transform:uppercase
   color:var(--dim)}
 
 /* ---- tiles ---------------------------------------------------------- */
-.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
-.tile{display:block;text-align:left;background:var(--card);border:1px solid var(--rule);
-  border-left:4px solid var(--steel);border-radius:3px;padding:14px;text-decoration:none}
-.tile:hover{background:var(--sunk)}
-.tile b{display:block;font:700 17px/1.1 var(--cond);letter-spacing:.015em;
-  text-transform:uppercase;margin-bottom:4px}
-.tile span{font-size:12.5px;color:var(--ink2);line-height:1.4}
-.tile.off{opacity:.55;border-left-color:var(--rule);cursor:default}
-/* the old Launcher: still there, deliberately not the bright thing on the page */
-.tile.legacy{border-left-color:var(--dim);background:var(--sunk)}
-.tile.legacy b{color:var(--ink2)}
+/* ---- tiles: the Launcher's big colour-coded cards -------------------- */
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.tile{display:grid;grid-template-columns:auto 1fr;gap:13px;align-items:center;
+  text-align:left;background:var(--blue);color:#fff;border:0;border-radius:var(--r);
+  padding:15px 16px;text-decoration:none;width:100%;font:inherit;
+  box-shadow:0 1px 2px rgba(18,35,60,.18)}
+.tile:hover{filter:brightness(1.08)}
+.tile:active{transform:translateY(1px)}
+.tile .ic{display:flex;align-items:center;justify-content:center;width:34px;height:34px;
+  border-radius:9px;background:rgba(255,255,255,.17);flex:none}
+.tile .ic svg{width:19px;height:19px;stroke:#fff;fill:none;stroke-width:2;
+  stroke-linecap:round;stroke-linejoin:round}
+.tile .tx{min-width:0}
+.tile b{display:block;font:700 18px/1.1 var(--cond);letter-spacing:.02em;
+  text-transform:uppercase;margin-bottom:2px}
+.tile span{display:block;font-size:12.5px;line-height:1.35;color:rgba(255,255,255,.82)}
+.tile.navy{background:var(--navy)}
+.tile.blue{background:var(--blue)}
+.tile.teal{background:var(--teal)}
+.tile.orange{background:var(--orange)}
+/* the old apps are still reachable and deliberately not the bright thing */
+.tile.muted{background:var(--card);color:var(--ink);box-shadow:none;
+  border:1px solid var(--rule)}
+.tile.muted .ic{background:var(--sunk)}
+.tile.muted .ic svg{stroke:var(--dim)}
+.tile.muted span{color:var(--ink2)}
+.tile.off{opacity:.6;cursor:default}
 .tile.off em{display:block;font-style:normal;font:500 10.5px/1.5 var(--mono);
-  color:var(--warn);margin-top:5px}
-/* a tile that leaves the app says so, rather than surprising you */
+  margin-top:5px}
 .tile .leaves{display:block;font-style:normal;font:500 10px/1.5 var(--mono);
-  letter-spacing:.04em;color:var(--dim);margin-top:5px}
-button.tile{width:100%;font:inherit}
+  letter-spacing:.04em;opacity:.75;margin-top:4px}
 
 /* a tool running inside the app: the bar stays above it */
 .frame{position:fixed;left:0;right:0;z-index:30;
@@ -380,11 +407,13 @@ h3.ssec{font:600 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercas
 td i.lookup{color:var(--warn);font-style:normal;font:500 12px/1.4 var(--mono)}
 
 /* ---- what is waiting on you ------------------------------------------ */
-.alerts{display:flex;flex-direction:column;gap:1px;background:var(--rule);
-  border:1px solid var(--rule);border-radius:3px;overflow:hidden;margin-bottom:20px}
+/* separate cards, not a boxed list - the band sits above everything else
+   and a frame around it reads as another panel to parse */
+.alerts{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
 .alert{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center;
-  width:100%;text-align:left;background:var(--card);padding:12px 13px;
-  border-left:4px solid var(--rule)}
+  width:100%;text-align:left;background:var(--card);padding:13px 14px;
+  border:1px solid var(--rule);border-left:4px solid var(--rule);
+  border-radius:var(--r)}
 .alert:hover{background:var(--sunk)}
 .alert .t{font-weight:600;font-size:14.5px;min-width:0;overflow-wrap:anywhere}
 .alert .w{grid-column:1;font:400 11.5px/1.4 var(--mono);color:var(--dim)}
@@ -441,3 +470,30 @@ label.chk input{width:24px;height:24px}
 .signin{padding-left:max(16px,env(safe-area-inset-left,0px));
   padding-right:max(16px,env(safe-area-inset-right,0px))}
 .frame{bottom:env(safe-area-inset-bottom,0px)}
+
+/* ---- the brand -------------------------------------------------------- */
+.mark img{display:block;width:72px;height:72px;margin:0 auto 12px;border-radius:50%;
+  background:#fff;padding:2px;box-shadow:0 2px 10px rgba(18,35,60,.18)}
+.mark b{font-size:30px}
+
+/* ---- rounder, to match the Launcher ---------------------------------- */
+.panel,.list,.people,.mx,.note,.spec,.steprow,.partrow,.plist,.prow,.items,
+.chkgrid label.chk,.sheet,.alerts,.find input,.fld input,.fld select,.fld textarea,
+.panel input,.btn,.mini,.res{border-radius:9px}
+.list,.people,.plist,.items,.alerts,.mx,.sheet,.panel{border-radius:var(--r)}
+.tile,.note{border-radius:var(--r)}
+h2.sec{color:var(--ink2);font-weight:700}
+.row:first-child,.prow:first-child{border-top-left-radius:var(--r);
+  border-top-right-radius:var(--r)}
+.row:last-child,.prow:last-child{border-bottom-left-radius:var(--r);
+  border-bottom-right-radius:var(--r)}
+
+/* At phone width the bar is Back + title + role + Out. Give the title the
+   room by tightening the two badges rather than truncating the screen name. */
+@media (max-width:430px){
+  .pill{font-size:8.5px;padding:4px 5px;letter-spacing:.06em}
+  .top .out{padding:0 9px;font-size:9.5px}
+  .top .ttl{font-size:16px}
+  .top{gap:7px;padding:0 9px}
+  .top .logo{width:26px;height:26px}
+}

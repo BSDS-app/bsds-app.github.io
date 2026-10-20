@@ -52,6 +52,8 @@ button is not security — anybody can open the browser console.
 | `fleet.js` | machines and customers — and the serial rule the parts books depend on |
 | `parts.js` | parts requests, orders, and receiving |
 | `alerts.js` | the band on the home screen: what is waiting on whoever just opened it |
+| `icons.js` | the line icons on the tiles |
+| `manifest.json` | what Add to Home Screen uses: the name, the logo, the navy |
 | `forms/preop.v1.json` | the checklist itself — 7 equipment types, 179 lines, lifted verbatim off the old app |
 | `forms/jsa.v1.json` | the JSA — 12 MSHA hazard categories, 3 conditional permits, 79 answerable items |
 | `forms/build_*.py` | how those files were built, and the count gates that prove no line went missing |
@@ -171,6 +173,29 @@ pre-ops so there is one answer to the question.
 
 Both are visible on the record and counted on the log, so nothing is quietly
 being kept or quietly being dropped.
+
+---
+
+## How it looks
+
+The palette is the Launcher's, **sampled off it rather than guessed**: navy
+`#1b3358` chrome, orange `#e8641c` accent, white panels on `#f5f6f8`, and the
+four card colours the Launcher already uses to say what kind of thing a
+button is — navy for owners-only, blue for field tools, orange for safety,
+teal for reference and anything that leaves the app. Old-app tiles are
+deliberately the quiet white ones.
+
+Tiles carry drawn line icons rather than emoji, which render differently on
+every phone and age badly. The set is small on purpose: an icon earns its
+place while the tiles are telling things apart at a glance, and a different
+picture on every button is just a second thing to read.
+
+**Add to Home Screen** uses `manifest.json` and the site's existing
+`icon-192.png` / `icon-512.png`, so the home-screen icon is the real logo and
+no new artwork was needed. Those icons live one level above `/app/`, which is
+where they really are in production — the test harness stands them in.
+
+Dark mode keeps the navy chrome. It is the brand, not a light-mode choice.
 
 ---
 

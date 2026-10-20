@@ -110,6 +110,16 @@ h2.sec{font:600 11px/1 var(--mono);letter-spacing:.15em;text-transform:uppercase
 .tile.legacy b{color:var(--ink2)}
 .tile.off em{display:block;font-style:normal;font:500 10.5px/1.5 var(--mono);
   color:var(--warn);margin-top:5px}
+/* a tile that leaves the app says so, rather than surprising you */
+.tile .leaves{display:block;font-style:normal;font:500 10px/1.5 var(--mono);
+  letter-spacing:.04em;color:var(--dim);margin-top:5px}
+button.tile{width:100%;font:inherit}
+
+/* a tool running inside the app: the bar stays above it */
+.frame{position:fixed;left:0;right:0;z-index:30;
+  top:calc(var(--hdh) + env(safe-area-inset-top,0px));bottom:0;background:var(--card)}
+.frame iframe{display:block;width:100%;height:100%;border:0}
+body.framed{overflow:hidden}
 
 /* ---- lists ---------------------------------------------------------- */
 .list{display:flex;flex-direction:column;gap:1px;background:var(--rule);

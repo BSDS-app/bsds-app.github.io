@@ -88,6 +88,19 @@ export async function signInPassword(email, password) {
   await authMod.signInWithEmailAndPassword(auth, email, password);
 }
 
+/* A tech setting their password for the first time.
+ *
+ * This creates a sign-in account and nothing else. It does not admit
+ * anybody: an account with no users record sees the "nobody has given this
+ * account a role yet" screen, and firestore.rules hands it nothing. What
+ * admits somebody is an invitation an owner wrote against their email
+ * address, which claim() below turns into their user record. So the worst a
+ * stranger can do here is leave an unusable account in the list. */
+export async function signUpPassword(email, password) {
+  const { auth, authMod } = await loadFirebase();
+  await authMod.createUserWithEmailAndPassword(auth, email, password);
+}
+
 export async function sendReset(email) {
   const { auth, authMod } = await loadFirebase();
   await authMod.sendPasswordResetEmail(auth, email);
@@ -107,6 +120,38 @@ export async function signOut() {
 /* A signed-in account with no users/{uid} document has no role, which is
  * not an error: it is somebody an owner has not admitted yet, and the app
  * says so rather than failing open. */
+/* Turn an invitation into a user record, once, on first sign-in.
+ *
+ * Returns the new profile, or null if there was no invitation - which is
+ * not an error, it is somebody nobody has admitted. The rules allow this
+ * write only when the role being claimed matches the role the invitation
+ * names, so a person cannot sign themselves in as an owner by editing what
+ * the browser sends. */
+async function claim(acct, db, m) {
+  const key = String(acct.email || '').toLowerCase();
+  if (!key) return null;
+  let inv = null;
+  try {
+    const snap = await m.getDoc(m.doc(db, 'invites', key));
+    inv = snap.exists() ? snap.data() : null;
+  } catch (e) { return null; }
+  if (!inv || !inv.role) return null;
+  const profile = {
+    name: inv.name || acct.displayName || acct.email,
+    role: inv.role,
+    active: true,
+    email: acct.email || '',
+    admittedAt: new Date().toISOString(),
+    admittedBy: inv.by || '',
+  };
+  await m.setDoc(m.doc(db, 'users', acct.uid), profile);
+  /* Clearing it is tidiness, not security - the record now decides. If the
+     delete fails the person is still admitted, so it is not worth failing
+     the sign-in over. */
+  try { await m.deleteDoc(m.doc(db, 'invites', key)); } catch (e) {}
+  return profile;
+}
+
 export async function start() {
   if (DEMO) { restoreDemo(); emit(); return; }
   const { auth, db, authMod, storeMod } = await loadFirebase();
@@ -118,6 +163,19 @@ export async function start() {
       profile = snap.exists() ? snap.data() : null;
     } catch (e) {
       profile = null;
+    }
+    /* No record yet? They may have been invited. */
+    if (!profile) {
+      try { profile = await claim(acct, db, storeMod); } catch (e) { profile = null; }
+    } else if (acct.email && profile.email !== acct.email) {
+      /* Keep the address on the record current, so the People screen can
+         show it for somebody other than whoever is looking. Harmless if it
+         fails - the rules let a person edit their own name and email and
+         nothing else. */
+      try {
+        await storeMod.updateDoc(storeMod.doc(db, 'users', acct.uid), { email: acct.email });
+        profile = { ...profile, email: acct.email };
+      } catch (e) {}
     }
     user = profile
       ? { uid: acct.uid, email: acct.email, name: profile.name || acct.displayName || acct.email,

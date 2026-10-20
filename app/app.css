@@ -304,3 +304,32 @@ h3.ssec{font:600 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercas
 .note b{color:var(--ink)}
 .note.warn{border-left-color:var(--red)}
 .empty{padding:26px 14px;text-align:center;color:var(--dim);font-size:13.5px}
+
+/* ---- people ---------------------------------------------------------- */
+.plist{display:flex;flex-direction:column;gap:1px;background:var(--rule);
+  border:1px solid var(--rule);border-radius:3px;overflow:hidden}
+.prow{background:var(--card);padding:12px 13px;display:grid;gap:10px;
+  grid-template-columns:1fr auto;align-items:center}
+.prow .who{min-width:0}
+.prow .who b{display:block;font-weight:600;font-size:15px;overflow-wrap:anywhere}
+.prow .who b em{font-style:normal;font:600 9px/1 var(--mono);letter-spacing:.1em;
+  text-transform:uppercase;background:var(--sunk);color:var(--dim);
+  padding:3px 5px;border-radius:2px;margin-left:7px;vertical-align:2px}
+.prow .who span{display:block;font:400 12px/1.4 var(--mono);color:var(--dim);
+  margin-top:2px;overflow-wrap:anywhere}
+.prow .act{display:flex;align-items:center;gap:7px;flex:none;flex-wrap:wrap;
+  justify-content:flex-end}
+.prow .act select{font:500 13px/1.2 var(--sans);padding:8px 9px;background:var(--paper);
+  color:var(--ink);border:1.5px solid var(--rule);border-radius:3px}
+.prow .act select:focus{outline:none;border-color:var(--mark)}
+.prow .act .mini{margin-top:0}
+.prow .act .hint{margin:0;font-size:11px}
+/* switched off: visibly not in play, still legible */
+.prow.off{background:var(--sunk)}
+.prow.off .who b{color:var(--dim)}
+.prow.pending{box-shadow:inset 3px 0 0 var(--mark)}
+.prow.pending .who b em{background:var(--mark);color:var(--markink)}
+@media (max-width:460px){
+  .prow{grid-template-columns:1fr}
+  .prow .act{justify-content:flex-start}
+}

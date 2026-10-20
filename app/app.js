@@ -9,6 +9,7 @@ import { ROLES, CAPS, GRANTS, HARD_RULES, can } from './roles.js';
 import * as auth from './auth.js';
 import * as preop from './preop.js';
 import * as jsa from './jsa.js';
+import * as team from './people.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s)
@@ -16,6 +17,7 @@ const esc = s => String(s == null ? '' : s)
 
 let DATA = { customers: [], equipment: [] };
 let route = { view: 'home', arg: null };
+let signupMode = false;
 const stack = [];
 
 /* ---------- data ------------------------------------------------------ */
@@ -92,6 +94,21 @@ function signIn() {
     });
     h.push('</div><p class="tiny">Preview. No accounts, no data written. ',
       'Pick a person to see exactly what they get.</p></div>');
+  } else if (signupMode) {
+    /* Setting a password is not the same as being let in. The invitation an
+       owner wrote is what admits you; this only creates the sign-in. Said
+       plainly here so nobody thinks they have been locked out by mistake. */
+    h.push('<div class="panel">',
+      '<div class="note">Use the email address Mike or Stew invited. Setting a ',
+      'password here creates your sign-in — what lets you into the app is the ',
+      'invitation against that address.</div>',
+      '<label for="email">Your email</label>',
+      '<input id="email" type="email" autocomplete="username" inputmode="email">',
+      '<label for="pw">Choose a password</label>',
+      '<input id="pw" type="password" autocomplete="new-password">',
+      '<button class="btn primary" id="makeacct">Create my sign-in</button>',
+      '<button class="btn ghost" id="backtosignin">Back to sign in</button>',
+      '<p class="msg" id="msg"></p></div>');
   } else {
     h.push('<div class="panel">',
       '<button class="btn primary" id="google">Sign in with Broken Spoke Google</button>',
@@ -102,6 +119,7 @@ function signIn() {
       '<input id="pw" type="password" autocomplete="current-password">',
       '<button class="btn primary" id="pwgo">Sign in</button>',
       '<button class="btn ghost" id="reset">Email me a reset link</button>',
+      '<button class="btn ghost" id="firsttime">First time here</button>',
       '<p class="msg" id="msg"></p></div>');
   }
   h.push('</div>');
@@ -449,24 +467,24 @@ async function preopRecord(id) {
   }
 }
 
-function people() {
+async function people() {
   chrome('People', 'Roles');
-  const h = ['<div class="wrap"><h1 class="pg">People</h1>',
-    '<p class="lede">An account with no role here cannot see anything, which is how '
-    + 'somebody leaving is handled: switch them off, not delete them.</p>',
-    '<div class="list">'];
-  auth.demoPeople().forEach(p => {
-    h.push('<button class="row" data-noop="1"><span><span class="nm">', esc(p.name),
-      '</span><span class="sub">', esc(p.email), '</span></span>',
-      '<span class="ct"><b>', esc(ROLES[p.role].label), '</b></span></button>');
-  });
-  h.push('</div>');
-  if (DEMO) {
-    h.push('<div class="note"><b>Preview list.</b> The real one comes from the ',
-      'accounts in Firebase. Adding and switching people off is the next piece here.</div>');
+  /* The database refuses this to anybody but an owner, so this is belt and
+     braces - but a permission error on screen reads like a broken app, and
+     a sentence reads like a decision. */
+  if (!auth.allow('users.manage')) {
+    $('view').innerHTML = '<div class="wrap"><div class="note warn"><b>Not your '
+      + 'account to change.</b> Who can see what is set by Mike and Stew.</div></div>';
+    return;
   }
-  h.push('</div>');
-  $('view').innerHTML = h.join('');
+  $('view').innerHTML = '<div class="wrap"><div class="empty">Loading…</div></div>';
+  try {
+    const data = await team.list();
+    team.draw($('view'), data, auth.currentUser());
+  } catch (e) {
+    $('view').innerHTML = '<div class="wrap"><div class="note warn"><b>Could not read '
+      + 'the people list.</b> ' + esc(e.message) + '</div></div>';
+  }
 }
 
 function perms() {
@@ -529,7 +547,7 @@ function draw() {
   else if (v === 'rig') machine(route.arg);
   else if (v === 'books') books();
   else if (v === 'logs') logs();
-  else if (v === 'people') people();
+  else if (v === 'people') { people(); return; }
   else if (v === 'perms') perms();
   else home();
 }
@@ -587,6 +605,58 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
+  /* ---- People ---- */
+  if (e.target.id === 'invadd') {
+    const msg = $('invmsg');
+    msg.className = 'msg';
+    e.target.disabled = true;
+    try {
+      const rec = await team.invite({ name: $('inv_name').value,
+        email: $('inv_email').value, role: $('inv_role').value });
+      await people();
+      /* redrawn, so say it on the fresh screen */
+      const m2 = $('invmsg');
+      if (m2) {
+        m2.className = 'msg ok';
+        m2.textContent = rec.name + ' is invited. They are in as soon as they sign in '
+          + 'with ' + rec.email + '.';
+      }
+    } catch (err) {
+      e.target.disabled = false;
+      msg.textContent = (err && err.message) || 'That did not work.';
+    }
+    return;
+  }
+  const act = e.target.closest('[data-active]');
+  if (act) {
+    act.disabled = true;
+    try { await team.setActive(act.dataset.active, act.dataset.to === 'on'); await people(); }
+    catch (err) { act.disabled = false; alertish(err); }
+    return;
+  }
+  const cancel = e.target.closest('[data-cancel]');
+  if (cancel) {
+    cancel.disabled = true;
+    try { await team.cancelInvite(cancel.dataset.cancel); await people(); }
+    catch (err) { cancel.disabled = false; alertish(err); }
+    return;
+  }
+
+  /* ---- the first-time sign-in path ---- */
+  if (e.target.id === 'firsttime') { signupMode = true; draw(); return; }
+  if (e.target.id === 'backtosignin') { signupMode = false; draw(); return; }
+  if (e.target.id === 'makeacct') {
+    const a = $('email').value.trim(), p = $('pw').value;
+    if (!a) { $('msg').textContent = 'Put your email in.'; return; }
+    if (p.length < 8) {
+      $('msg').textContent = 'Make the password at least 8 characters.';
+      return;
+    }
+    try { await auth.signUpPassword(a, p); }
+    catch (err) { $('msg').className = 'msg'; $('msg').textContent = friendly(err); }
+    return;
+  }
+
   if (e.target.id === 'google') {
     try { await auth.signInGoogle(); }
     catch (err) { $('msg').textContent = friendly(err); }
@@ -640,6 +710,13 @@ document.addEventListener('change', (e) => {
     preop.drawChecklist($('view'), TPL);
   }
   if (d.j === 'lotoRequired' && JTPL) jsa.sync($('view'), JTPL);
+  if (d.role) {
+    const sel = e.target;
+    sel.disabled = true;
+    team.setRole(d.role, sel.value)
+      .then(people)
+      .catch(err => { sel.disabled = false; alertish(err); people(); });
+  }
 });
 
 /* No window.alert anywhere - a modal dialog freezes the page for everyone,
@@ -667,6 +744,14 @@ function friendly(err) {
   if (c.includes('user-not-found')) return 'No account with that email.';
   if (c.includes('too-many-requests')) return 'Too many tries. Wait a minute.';
   if (c.includes('popup-closed')) return 'Sign-in window closed before it finished.';
+  if (c.includes('email-already-in-use')) {
+    return 'There is already a sign-in for that address — use Sign in, or the reset link.';
+  }
+  if (c.includes('weak-password')) return 'That password is too short.';
+  if (c.includes('invalid-email')) return 'That does not look like an email address.';
+  if (c.includes('operation-not-allowed')) {
+    return 'Setting up new sign-ins is switched off on the project.';
+  }
   if (c.includes('network')) return 'No connection to the sign-in service.';
   return (err && err.message) || 'Sign-in failed.';
 }

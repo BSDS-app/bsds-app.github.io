@@ -12,6 +12,7 @@ import * as jsa from './jsa.js';
 import * as team from './people.js';
 import * as fleet from './fleet.js';
 import * as parts from './parts.js';
+import * as alerts from './alerts.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s)
@@ -148,7 +149,9 @@ function pending() {
 function home() {
   const u = auth.currentUser();
   chrome('Broken Spoke', u.name);
-  const h = ['<div class="wrap">'];
+  /* The band is filled in after the page draws rather than before it, so a
+     slow read never leaves somebody looking at a blank screen. */
+  const h = ['<div class="wrap"><div id="alerts"></div>'];
 
   const tiles = [];
   for (const [key, t] of Object.entries(CONFIG.tools)) {
@@ -226,6 +229,18 @@ function home() {
   }
   h.push('</div>');
   $('view').innerHTML = h.join('');
+  paintAlerts();
+}
+
+/* Drawn separately and allowed to fail quietly: if the band cannot load,
+   the app is still the app. */
+async function paintAlerts() {
+  const box = $('alerts');
+  if (!box) return;
+  try {
+    const items = await alerts.gather(DATA);
+    if ($('alerts') === box) alerts.draw(box, items);
+  } catch (e) { /* no band rather than a broken screen */ }
 }
 
 function equipment() {

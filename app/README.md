@@ -51,11 +51,12 @@ button is not security — anybody can open the browser console.
 | `people.js` | who is on the app: invitations, roles, switching somebody off |
 | `fleet.js` | machines and customers — and the serial rule the parts books depend on |
 | `parts.js` | parts requests, orders, and receiving |
+| `alerts.js` | the band on the home screen: what is waiting on whoever just opened it |
 | `forms/preop.v1.json` | the checklist itself — 7 equipment types, 179 lines, lifted verbatim off the old app |
 | `forms/jsa.v1.json` | the JSA — 12 MSHA hazard categories, 3 conditional permits, 79 answerable items |
 | `forms/build_*.py` | how those files were built, and the count gates that prove no line went missing |
 | `seed/` | 15 customers and 77 rigs from the Fullbay export |
-| `test/` | 160 shell, 259 Pre-Op, 149 JSA, 88 Parts, 73 Fleet, 48 People, 97 rule, 60 emulator checks |
+| `test/` | 160 shell, 259 Pre-Op, 149 JSA, 88 Parts, 73 Fleet, 48 People, 34 Alerts, 97 rule, 60 emulator checks |
 
 Until `config.js` has a Firebase key the app runs in **demo mode**: a person
 picker instead of a sign-in form, no network, nothing written. The screens are
@@ -170,6 +171,50 @@ pre-ops so there is one answer to the question.
 
 Both are visible on the record and counted on the log, so nothing is quietly
 being kept or quietly being dropped.
+
+---
+
+## What is waiting on you
+
+The home screen carries a short band of things somebody has to act on, by
+role. A rig down waiting on parts and a defect nobody has signed off are
+drawn as stop-work; parts to order and serials to fill in sit quietly below
+them. A tech sees only his own, and only while there is still something he
+can do about it.
+
+**It is only worth anything while it is short.** The test for adding a line
+is not "would this be useful to know" — almost anything passes that — it is
+*does somebody have to do something about this today, and will it stop being
+here once they have?* A count that is never zero is decoration, and the first
+line people learn to skip is the one that is there every single day. An empty
+shop shows no band at all, and there is a test that fails if that stops being
+true.
+
+**It does not reach anybody.** The band appears when the app is opened and
+not before. Sending a down rig to a phone needs something server-side, which
+means the Blaze plan — see below. What that would send is exactly what
+`alerts.gather()` already returns, so switching it on is a sender, not a
+rewrite.
+
+### Notifications on a phone, when you want them
+
+Three things are needed, and none of them are code that exists yet:
+
+1. **Blaze.** A phone cannot push to another phone; something server-side
+   has to send it. One Cloud Function, triggered when a parts request is
+   written with `urgency: 'down'`. The free allowance is about two million
+   runs a month against a few dozen a day, so the cost is nothing — but the
+   plan has to be on, and a budget alert set the same day.
+2. **A service worker and a web app manifest**, plus a `fcmTokens`
+   collection so each person's device can be reached, with a rule that a
+   person may only write their own.
+3. **On iPhones, Add to Home Screen.** Web push does not fire in a Safari
+   tab — iOS 16.4 or newer, installed to the Home Screen, no workaround.
+   Android works from the browser.
+
+Scope it to **down rigs only**. Everything else sits in the band on purpose:
+a phone that buzzes for every pre-op gets muted inside a week, and then the
+one that mattered is muted too.
 
 ---
 
@@ -306,6 +351,7 @@ node test/jsa.test.mjs        # the JSA: the hazard review, and the permits it r
 node test/people.test.mjs     # roles, invitations, and the owner who cannot lock himself out
 node test/fleet.test.mjs      # machines and customers, and every way of getting a duplicate serial past it
 node test/parts.test.mjs      # request to order to received, and the line with no part number
+node test/alerts.test.mjs     # the home band, including that a quiet shop shows nothing
 node test/rules.static.mjs    # roles.js and firestore.rules still agree
 ```
 

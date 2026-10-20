@@ -378,3 +378,20 @@ h3.ssec{font:600 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercas
 .rowbtn{display:block;text-align:left;width:100%;min-width:0;font:inherit}
 .spec div.bad b{color:var(--red)}
 td i.lookup{color:var(--warn);font-style:normal;font:500 12px/1.4 var(--mono)}
+
+/* ---- what is waiting on you ------------------------------------------ */
+.alerts{display:flex;flex-direction:column;gap:1px;background:var(--rule);
+  border:1px solid var(--rule);border-radius:3px;overflow:hidden;margin-bottom:20px}
+.alert{display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center;
+  width:100%;text-align:left;background:var(--card);padding:12px 13px;
+  border-left:4px solid var(--rule)}
+.alert:hover{background:var(--sunk)}
+.alert .t{font-weight:600;font-size:14.5px;min-width:0;overflow-wrap:anywhere}
+.alert .w{grid-column:1;font:400 11.5px/1.4 var(--mono);color:var(--dim)}
+.alert .go{grid-row:1/-1;grid-column:2;font:400 15px/1 var(--mono);color:var(--dim)}
+/* a rig that is not drilling does not look like a to-do item */
+.alert.stop{border-left-color:var(--red)}
+.alert.stop .t{color:var(--red)}
+.alert.soon{border-left-color:var(--mark)}
+.alert.note{border-left-color:var(--rule)}
+.alert.note .t{font-weight:500;color:var(--ink2)}

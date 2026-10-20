@@ -65,13 +65,19 @@ export async function list() {
     return { users: demoUsers(), invites: readLocal(D_INV, []) };
   }
   const { d, m } = await auth.db();
-  const [us, inv] = await Promise.all([
-    m.getDocs(m.collection(d, 'users')),
-    m.getDocs(m.collection(d, 'invites')),
-  ]);
+  /* Office reads the roster but not the invitations - who is being hired is
+     not staff business. So the two are fetched separately and the invites
+     half is simply absent for anybody who may not see it. Asking for it
+     anyway would fail the whole call and take the roster down with it. */
+  const us = await m.getDocs(m.collection(d, 'users'));
+  let invites = [];
+  if (auth.allow('users.manage')) {
+    const inv = await m.getDocs(m.collection(d, 'invites'));
+    invites = inv.docs.map(x => ({ email: x.id, ...x.data() }));
+  }
   return {
     users: us.docs.map(x => ({ uid: x.id, ...x.data() })),
-    invites: inv.docs.map(x => ({ email: x.id, ...x.data() })),
+    invites,
   };
 }
 

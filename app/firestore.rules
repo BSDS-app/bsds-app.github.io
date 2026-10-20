@@ -33,6 +33,12 @@ service cloud.firestore {
 
     /* ---- people -----------------------------------------------------
        You can read your own record. Owners read and write everyone's.
+       Office READS the roster - Mike's call, Oct 2026 - so that a work
+       order Jazmine assigns carries the tech's id and reaches his phone.
+       Reading the roster is not managing it: office still cannot set a
+       role, switch anybody off, invite anybody, or see who is being
+       hired. The roster is names, addresses and roles; the personnel
+       file is a different collection and is still owners-only.
 
        Three things this has to hold at once:
 
@@ -55,7 +61,8 @@ service cloud.firestore {
           && request.resource.data.active == resource.data.active;
     }
     match /users/{uid} {
-      allow read:   if isOwner() || (signedIn() && uid == request.auth.uid);
+      allow read:   if isOwner() || isOffice()
+                    || (signedIn() && uid == request.auth.uid);
       allow delete: if isOwner() && uid != request.auth.uid;
       allow create: if (isOwner() && uid != request.auth.uid)
                     || (signedIn() && uid == request.auth.uid
@@ -188,12 +195,10 @@ service cloud.firestore {
        Rung in by a tech or an owner; built in Fullbay by the office, who
        put the service order number back on it.
 
-       A tech sees the ones he raised, and any an OWNER has assigned him.
-       Office cannot stamp an id on one, because office cannot read the
-       staff list - so an assignment office makes carries a name and not
-       an id, and that tech will not see it unless he raised it. A real
-       limit, written down rather than papered over; closing it means
-       letting office read the roster, which is Mike's call.
+       A tech sees the ones he raised, and any one he has been assigned.
+       Office can read the roster, so an assignment office makes stamps
+       the tech's id as well as his name and lands on his screen without
+       a phone call. That was Mike's call, made in October 2026.
 
        The service order number is the office's to write. A tech may
        correct his own request while it is still open, and may never set

@@ -18,14 +18,13 @@
  * number back on his own screen is what closes that loop without a phone
  * call in the other direction.
  *
- * One known limit, stated here so it is not mistaken for a bug: a tech sees
- * the work orders HE raised. If an owner assigns him one somebody else
- * raised, he sees that too, because an owner can look up who he is and
- * stamp his id on it. Office cannot - only owners can read the staff list -
- * so a work order Jazmine assigns carries the tech's NAME but not his id,
- * and he will not see it until an owner assigns it or he raised it himself.
- * Fixing that properly means letting office read the roster, which is
- * Mike's call to make, not mine.
+ * A tech sees the work orders HE raised, plus any he has been assigned.
+ * Assigning stamps the tech's id as well as his name, which is what makes
+ * it land on his screen; office can read the roster to do that, which was
+ * Mike's call in October 2026. If the roster cannot be read for any reason
+ * the name is still recorded and the id is left empty - the assignment is
+ * never silently lost, it just does not reach his phone until an owner
+ * re-assigns it.
  */
 import { CONFIG } from './config.js';
 import * as auth from './auth.js';

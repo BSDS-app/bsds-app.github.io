@@ -59,7 +59,7 @@ button is not security — anybody can open the browser console.
 | `forms/jsa.v1.json` | the JSA — 12 MSHA hazard categories, 3 conditional permits, 79 answerable items |
 | `forms/build_*.py` | how those files were built, and the count gates that prove no line went missing |
 | `seed/` | 15 customers and 77 rigs from the Fullbay export |
-| `test/` | 160 shell, 259 Pre-Op, 164 JSA, 88 Parts, 73 Fleet, 48 People, 34 Alerts, 62 Work Order, 113 rule, 193 emulator checks |
+| `test/` | 160 shell, 259 Pre-Op, 164 JSA, 88 Parts, 73 Fleet, 48 People, 34 Alerts, 74 Work Order, 120 rule, 207 emulator checks |
 
 Until `config.js` has a Firebase key the app runs in **demo mode**: a person
 picker instead of a sign-in form, no network, nothing written. The screens are
@@ -332,12 +332,23 @@ while it is still open and can never write the number or move the status —
 a number a tech can type is a number the office cannot trust. That is in
 `firestore.rules`, not just the screen.
 
-**One limit, written down rather than papered over.** A tech sees the work
-orders he raised, plus any an *owner* assigned him. Office cannot stamp a
-tech's id on one, because office cannot read the staff list — so an
-assignment Jazmine makes carries his **name** but not his id, and he will not
-see it unless he raised it. Closing that means letting office read the
-roster, which is your call, not mine.
+A tech sees the work orders he raised, plus any he has been assigned.
+Assigning stamps the tech's **id** as well as his name, which is what makes
+it land on his screen — so Jazmine can hand a job to Noah without ringing
+him. That works because **office can read the roster**, which you decided in
+October 2026.
+
+Reading the roster is not running it. Office can see who the techs are and
+nothing else about people: no setting a role, no switching anybody off, no
+inviting anybody, and no sight of who is being hired. There is no People
+button on her screen at all. The personnel file is a separate collection and
+is still owners-only — Mike and Stew. Both halves of that line are tested,
+in the rules and on the screen.
+
+The assign field stays a type-in box with the roster behind it rather than a
+dropdown, so the office can still put down a name that is not on the list — a
+new hire, a contractor — and the assignment is kept either way. Picking a
+real tech is what stamps the id.
 
 ---
 

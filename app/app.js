@@ -559,10 +559,11 @@ async function jsaRecord(id) {
 }
 
 /* ---------- work orders ------------------------------------------------ */
-/* The tech list is only readable by an owner, so it is fetched when it can
-   be and the field falls back to free text when it cannot. */
+/* Owners and office read the roster; a tech does not. It is fetched when it
+   can be and the field falls back to free text when it cannot - so the form
+   still works for whoever is standing there, with or without the list. */
 async function woPeople() {
-  if (!auth.allow('users.manage')) return [];
+  if (!auth.allow('users.read')) return [];
   try { return (await team.list()).users; } catch (e) { return []; }
 }
 

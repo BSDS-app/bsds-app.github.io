@@ -55,6 +55,7 @@ export const CAPS = {
   'reports.view':    'Shop reports, AR aging, job costs',
   'command.view':    'Open the Command Center',
   'hr.view':         'Personnel files',
+  'users.read':      'See who is on the app and what they are',
   'users.manage':    'Add people and set what they can see',
 };
 
@@ -70,7 +71,7 @@ export const GRANTS = {
     'jsa.submit', 'jsa.own', 'jsa.log',
     'receipts.submit', 'receipts.images', 'receipts.log',
     'parts.request', 'parts.order', 'wo.manage', 'books.view',
-    'equipment.view', 'customers.edit', 'reports.view',
+    'equipment.view', 'customers.edit', 'reports.view', 'users.read',
   ],
   owner: [
     'preop.submit', 'preop.log', 'preop.correct', 'preop.hold',
@@ -78,7 +79,7 @@ export const GRANTS = {
     'receipts.submit', 'receipts.images', 'receipts.log',
     'parts.request', 'parts.order', 'wo.request', 'wo.manage', 'books.view',
     'equipment.view', 'equipment.edit', 'customers.edit', 'reports.view',
-    'command.view', 'hr.view', 'users.manage',
+    'command.view', 'hr.view', 'users.read', 'users.manage',
   ],
   customer: ['books.view', 'parts.request'],
 };

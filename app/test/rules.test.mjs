@@ -494,6 +494,43 @@ await ok('and cannot write a record for somebody else', async () => {
     { name: 'Clint', role: 'owner', active: true }));
 });
 
+/* ---- receipts: sent in, never read back -------------------------------
+   The service order number is the office's to write, and so is the
+   purchase order number that later answers "which POs have no receipt". */
+const rec = (extra) => ({ uid: 'clint', byName: 'Clint', vendor: 'NAPA',
+  amount: 38500, invoiceDate: '2026-10-20', paymentMethod: 'Company Card',
+  docType: 'Invoice', status: 'new', poNumber: '',
+  lines: [{ so: '1666', amount: 30000 }, { so: '1520', amount: 8500 }],
+  soList: ['1666', '1520'], driveFileUrl: '', ...(extra || {}) });
+
+await ok('a tech sends a receipt in', async () => {
+  await assertSucceeds(setDoc(doc(as('clint'), 'receipts/r9'), rec()));
+});
+await ok('and cannot read it back, nor anyone else\u2019s', async () => {
+  await assertFails(getDoc(doc(as('clint'), 'receipts/r9')));
+  await assertFails(getDocs(collection(as('clint'), 'receipts')));
+});
+await ok('a receipt cannot be filed already entered', async () => {
+  await assertFails(setDoc(doc(as('clint'), 'receipts/r10'),
+    rec({ status: 'entered' })));
+});
+await ok('nor with a purchase order number already on it', async () => {
+  await assertFails(setDoc(doc(as('clint'), 'receipts/r11'),
+    rec({ poNumber: '54278999' })));
+});
+await ok('a tech cannot send one in under another name', async () => {
+  await assertFails(setDoc(doc(as('clint'), 'receipts/r12'), rec({ uid: 'noah' })));
+});
+await ok('office works the list and writes the purchase order number', async () => {
+  await assertSucceeds(getDocs(collection(as('jaz'), 'receipts')));
+  await assertSucceeds(setDoc(doc(as('jaz'), 'receipts/r9'),
+    rec({ status: 'entered', poNumber: '54278999' })));
+});
+await ok('only an owner deletes a receipt', async () => {
+  await assertFails(deleteDoc(doc(as('jaz'), 'receipts/r9')));
+  await assertSucceeds(deleteDoc(doc(as('mike'), 'receipts/r9')));
+});
+
 /* ---- push tokens ------------------------------------------------------
    A token is the address of one particular phone. Your own is yours;
    nobody else's is anybody's business, owners included. */

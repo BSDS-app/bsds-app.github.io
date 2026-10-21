@@ -162,6 +162,19 @@ ok(/uid == request\.auth\.uid && unchangedRoleAndActive\(\)/.test(userUpdate),
     `an owner cannot ${verb} their own record`, r);
 });
 
+/* ---- receipts: filed open, and the PO number is the office's ---------- */
+const recCreate = allows(block('receipts'), 'create').join(' | ');
+ok(/request\.resource\.data\.status == 'new'/.test(recCreate),
+  'a receipt is filed waiting on the office', recCreate);
+ok(/request\.resource\.data\.poNumber == ''/.test(recCreate),
+  'and without a purchase order number on it', recCreate);
+const recRead = allows(block('receipts'), 'read').join(' | ');
+ok(!/isTech\(\)|staff\(\)/.test(recRead),
+  'a tech sends receipts in and reads none of them back', recRead);
+ok(!GRANTS.tech.includes('receipts.log') && !GRANTS.tech.includes('receipts.images'),
+  'and the matrix agrees on both the log and the images');
+ok(GRANTS.tech.includes('receipts.submit'), 'but a tech can still send one in');
+
 /* ---- office reads the roster, and only reads it -----------------------
    Mike opened this in Oct 2026 so that an assignment office makes lands on
    the tech's phone. The line between reading and running it is the whole
@@ -249,6 +262,14 @@ const idx = JSON.parse(fs.readFileSync(new URL('../firestore.indexes.json',
 ok((idx.indexes || []).some(i => i.collectionGroup === 'workOrders'
   && i.fields[0].fieldPath === 'assignedUid'),
   'workOrders: the assigned-to-me branch has an index too');
+
+/* The receipts worklist filters by status and sorts by date, which
+   Firestore will not do without an index - and a missing one reads as an
+   empty list, which looks exactly like "nothing waiting". */
+ok((idx.indexes || []).some(i => i.collectionGroup === 'receipts'
+  && i.fields.some(f => f.fieldPath === 'status')
+  && i.fields.some(f => f.fieldPath === 'createdAt')),
+  'receipts: the office worklist has its index');
 
 /* the CLI needs to know which project and where the files are */
 const fbj = JSON.parse(fs.readFileSync(new URL('../firebase.json', import.meta.url), 'utf8'));

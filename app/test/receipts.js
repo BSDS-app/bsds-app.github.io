@@ -304,22 +304,44 @@ export { esc };
 export async function scan(fileObj) {
   const url = CONFIG.backends && CONFIG.backends.launcher;
   if (!url) throw new Error('No receipts backend is configured.');
-  const base64 = await toBase64(fileObj);
   const res = await fetch(url, {
     method: 'POST',
+    /* text/plain keeps this a simple cross-origin request, with no
+       preflight for Apps Script to answer. The Launcher has always sent it
+       this way; copying a path that works beats reasoning about one. */
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({
       action: 'scanReceipt',
-      base64Data: base64,
+      base64Data: bareBase64(await toDataUrl(fileObj)),
       fileName: fileObj.name || '',
       mimeType: fileObj.type || 'image/jpeg',
     }),
   });
-  const out = await res.json();
+  let out;
+  try { out = await res.json(); }
+  catch (e) { throw new Error('The receipts backend answered with something that was not JSON.'); }
   if (out.status !== 'ok') throw new Error(out.message || 'The photo did not go through.');
   return out;
 }
 
-function toBase64(f) {
+/* THE PREFIX COMES OFF HERE, not at the far end.
+ *
+ * FileReader hands back "data:image/jpeg;base64,AAAA..." and the backend
+ * wants the part after the comma. The script in Drive has a helper that
+ * strips it, but the deployment actually answering that URL does not -
+ * sending the whole data URL came back as "Exception: could not decode
+ * string", which is Apps Script failing to base64-decode "data:image/...".
+ *
+ * So this is done on our side, the way the Launcher has always done it.
+ * Stripping something already stripped is harmless; relying on the far end
+ * to strip it was not. */
+export function bareBase64(dataUrl) {
+  const s = String(dataUrl || '');
+  const i = s.indexOf('base64,');
+  return i > -1 ? s.slice(i + 7) : s;
+}
+
+function toDataUrl(f) {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
     r.onload = () => resolve(String(r.result || ''));

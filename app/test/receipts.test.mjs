@@ -140,9 +140,49 @@ for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) 
 
   // the standing buckets are offered without any export
   const sos = await page.locator('#rsos option').evaluateAll(os => os.map(o => o.value));
-  ok(sos.includes('1521'), `${tag} fuel is offered as a service order`, sos.join(','));
-  ok(sos.includes('1520'), `${tag} and shop supplies`);
-  ok(sos.includes('1551'), `${tag} and the trucks`);
+  /* Each option carries the number AND the words, so the list filters
+     whether somebody types "1520" or "shop". */
+  ok(sos.some(v => /^1521\b/.test(v) && /Fuel/i.test(v)),
+    `${tag} fuel is offered by number and by name`, sos.join(' | '));
+  ok(sos.some(v => /^1520\b/.test(v) && /Shop supplies/i.test(v)),
+    `${tag} and shop supplies the same way`);
+  ok(sos.some(v => /^1551\b/.test(v) && /Clint/i.test(v)),
+    `${tag} and the trucks are findable by whose they are`);
+
+  // ---- the service order box takes WORDS ---------------------------
+  // Mike: "I want to write SHOP SUPPLIES". Standing at a counter you know
+  // what you are buying, not that it is service order 1520.
+  const soField = await page.evaluate(() => {
+    const el = document.querySelector('[data-l="so"]');
+    return { inputmode: el.getAttribute('inputmode'), type: el.type,
+             placeholder: el.placeholder };
+  });
+  ok(!soField.inputmode, `${tag} the service order box does not force a number pad`,
+    JSON.stringify(soField));
+  ok(soField.type === 'text', `${tag} and takes text`);
+
+  const res = await page.evaluate(async () => {
+    const m = await import('./receipts.js');
+    const r = t => { const x = m.resolveSO(t); return [x.so, x.label, x.free]; };
+    return {
+      number: r('1520'),
+      picked: r('1520 Shop supplies'),
+      words: r('SHOP SUPPLIES'),
+      lower: r('shop supplies'),
+      fuel: r('Fuel'),
+      unknown: r('the blue trailer'),
+    };
+  });
+  ok(res.words[0] === '1520', `${tag} THE POINT: typing SHOP SUPPLIES resolves to 1520`,
+    JSON.stringify(res.words));
+  ok(res.lower[0] === '1520', `${tag} and case makes no difference`);
+  ok(res.number[0] === '1520' && res.number[1] === 'Shop supplies',
+    `${tag} a bare number still works and picks up its name`);
+  ok(res.picked[0] === '1520', `${tag} and so does what the picker inserts`);
+  ok(res.fuel[0] === '1521', `${tag} FUEL finds the fuel work order`, JSON.stringify(res.fuel));
+  ok(res.unknown[0] === 'the blue trailer' && res.unknown[2] === true,
+    `${tag} something nobody recognises is KEPT as written and flagged, not refused`,
+    JSON.stringify(res.unknown));
 
   // ---- what it refuses --------------------------------------------
   await page.locator('#rsend').click();
@@ -212,6 +252,22 @@ for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) 
   await page.waitForTimeout(400);
   m = await msg();
   ok(/99\.99/.test(m), `${tag} a penny out is caught, not rounded away`, m.slice(0, 110));
+
+  // ---- a receipt coded in words files, and is flagged --------------
+  await openForm();
+  await setR('vendor', 'Walmart');
+  await setR('amount', '41.20');
+  await setR('invoiceDate', '2026-10-21');
+  await page.evaluate(() => { document.querySelector('[data-r="paymentMethod"]').value = 'Company Card'; });
+  await setLine(0, 'SHOP SUPPLIES', '41.20');
+  await page.locator('#rsend').click();
+  await page.waitForTimeout(1200);
+  const words = await page.locator('#view').innerText();
+  ok(/Walmart/.test(words), `${tag} a receipt written in words files`,
+    words.replace(/\s+/g, ' ').slice(0, 100));
+  ok(/1520/.test(words),
+    `${tag} and the record carries the real service order it resolved to`,
+    words.replace(/\s+/g, ' ').slice(0, 140));
 
   // ---- the office works the list ----------------------------------
   await be('demo-jaz');

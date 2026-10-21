@@ -104,6 +104,26 @@ for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) 
   const msg = async () => (await page.locator('#rmsg').count())
     ? ((await page.locator('#rmsg').textContent()) || '') : '';
 
+  // ---- the photo goes up as bare base64 ---------------------------
+  // Sending the whole "data:image/jpeg;base64,..." string came back from
+  // Apps Script as "Exception: could not decode string". The prefix comes
+  // off on our side now, the way the Launcher has always done it, and this
+  // is here so nobody puts it back.
+  const b64 = await page.evaluate(async () => {
+    const m = await import('./receipts.js');
+    return {
+      stripped: m.bareBase64('data:image/jpeg;base64,AAAA'),
+      alreadyBare: m.bareBase64('AAAA'),
+      pdf: m.bareBase64('data:application/pdf;base64,Zm9v'),
+      empty: m.bareBase64(''),
+    };
+  });
+  ok(b64.stripped === 'AAAA', `${tag} the data-url prefix is stripped before sending`,
+    JSON.stringify(b64));
+  ok(b64.alreadyBare === 'AAAA', `${tag} and stripping bare base64 leaves it alone`);
+  ok(b64.pdf === 'Zm9v', `${tag} a PDF receipt strips the same way`);
+  ok(b64.empty === '', `${tag} and nothing in gives nothing out rather than throwing`);
+
   // ---- a tech can send one in -------------------------------------
   await be('demo-clint');
   const tiles = (await page.locator('.tile b').allTextContents()).map(s => s.trim());

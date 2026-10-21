@@ -77,6 +77,51 @@ export async function pickList(workOrders) {
   return out;
 }
 
+/* WHAT SOMEBODY TYPES IN THE SERVICE ORDER BOX.
+ *
+ * It is a box for words, not a number field. Mike's point, and he is
+ * right: standing at a counter you know you are buying shop supplies, you
+ * do not know that shop supplies is service order 1520. Writing
+ * "SHOP SUPPLIES" has to work.
+ *
+ * So anything is accepted, and resolved as far as it can be:
+ *
+ *   "1520"                -> SO 1520, Shop supplies
+ *   "1520 Shop supplies"  -> the same (what the picker inserts)
+ *   "shop supplies"       -> SO 1520, matched on the words
+ *   "SHOP SUPPLIES"       -> the same. Case is not a decision
+ *   "the blue trailer"    -> kept exactly as written, flagged for the office
+ *
+ * The last line is the important one. An unresolved reference is not an
+ * error and must never be refused - refusing it is how you end up with
+ * nothing written down at all. It is recorded as the person wrote it and
+ * shown to the office as needing a real service order, which is a job for
+ * somebody who has Fullbay open, not for somebody holding a part.
+ */
+export function resolveSO(text, picks) {
+  const raw = String(text || '').trim();
+  if (!raw) return { so: '', label: '', free: false };
+  const all = (picks && picks.length ? picks : buckets());
+
+  /* "1520" or "1520 Shop supplies" - the number leads */
+  const lead = raw.match(/^(\d{3,7})\b\s*(.*)$/);
+  if (lead) {
+    const hit = all.find(b => String(b.so) === lead[1]);
+    return { so: lead[1], label: hit ? hit.label : (lead[2] || ''), free: !hit };
+  }
+
+  /* words: an exact match on the label first, then a loose one, so that
+     "shop supplies" and "SHOP SUPPLIES" and "Shop Supplies" are one thing */
+  const up = raw.toUpperCase();
+  let hit = all.find(b => String(b.label).toUpperCase() === up);
+  if (!hit) hit = all.find(b => String(b.label).toUpperCase().indexOf(up) === 0);
+  if (!hit && up.length >= 4) hit = all.find(b => String(b.label).toUpperCase().indexOf(up) > -1);
+  if (hit) return { so: String(hit.so), label: hit.label, free: false };
+
+  /* Nobody's fault. Written down as it stands, for the office to place. */
+  return { so: raw, label: '', free: true };
+}
+
 /* ---------- reading the form ----------------------------------------- */
 
 /* Returns { problems, at, rec }. `at` is the selector of the first thing to
@@ -134,7 +179,7 @@ export function collect(host, ctx) {
   }
 
   const me = auth.currentUser();
-  const known = pick(ctx, lines.map(l => l.so));
+  const picks = (ctx && ctx.picks) || [];
 
   return {
     problems,
@@ -149,8 +194,12 @@ export function collect(host, ctx) {
       paymentMethod: val('paymentMethod'),
       docType: val('docType') || 'Invoice',
       note: val('note'),
-      lines: lines.map(l => ({ so: l.so, amount: l.amount, label: known[l.so] || '' })),
-      soList: lines.map(l => l.so),
+      lines: lines.map(l => {
+        const r = resolveSO(l.so, picks);
+        return { so: r.so, amount: l.amount, label: r.label, free: r.free };
+      }),
+      soList: lines.map(l => resolveSO(l.so, picks).so),
+      needsSO: lines.some(l => resolveSO(l.so, picks).free),
       poNumber: '',
       driveFileUrl: (ctx && ctx.driveFileUrl) || '',
       driveFileId: (ctx && ctx.driveFileId) || '',
@@ -158,12 +207,6 @@ export function collect(host, ctx) {
       createdAt: new Date().toISOString(),
     },
   };
-}
-
-function pick(ctx, sos) {
-  const out = {};
-  ((ctx && ctx.picks) || []).forEach(p => { if (sos.indexOf(p.so) >= 0) out[p.so] = p.label; });
-  return out;
 }
 
 /* "Crus" and "CRUS OIL INC." were two vendors in the old log and one
@@ -388,9 +431,11 @@ export function drawForm(host, ctx) {
   h.push('</div></div>');
 
   h.push('<h2 class="sec">What it was for</h2><div class="panel">',
-    '<p class="hint">One job is the usual case. Bought shop supplies while you were ',
-    'picking up a part? Add a line and split it — that is the only way both ',
-    'ends get charged properly.</p>',
+    '<p class="hint">Write the number if you know it, or just write what it was ',
+    'for — <b>SHOP SUPPLIES</b>, <b>FUEL</b>, <b>CLINT TRUCK</b>. The office ',
+    'puts the number on it. Bought shop supplies while picking up a part? ',
+    'Add a line and split it — that is the only way both ends get charged ',
+    'properly.</p>',
     '<div id="rlines"></div>',
     '<button type="button" class="mini" id="raddline">+ SPLIT IT ACROSS ANOTHER JOB</button>',
     '<p class="hint" id="rleft"></p></div>');
@@ -401,7 +446,7 @@ export function drawForm(host, ctx) {
   h.push('<p class="msg" id="rmsg"></p>',
     '<button type="button" class="btn primary" id="rsend">SEND IT IN</button>',
     '</form><datalist id="rsos">',
-    picks.map(p => '<option value="' + esc(p.so) + '">' + esc(p.label) + '</option>').join(''),
+    picks.map(p => '<option value="' + esc(p.so + ' ' + p.label) + '"></option>').join(''),
     '</datalist></div>');
 
   host.innerHTML = h.join('');
@@ -420,7 +465,8 @@ function fld(key, label, type, value, list) {
 export function lineRow(i, so, amount) {
   return '<div class="line" data-line="' + i + '"><div class="fgrid">'
     + '<div class="fld"><label>Service order</label>'
-    + '<input data-l="so" list="rsos" value="' + esc(so || '') + '" inputmode="numeric"></div>'
+    + '<input data-l="so" list="rsos" value="' + esc(so || '')
+    + '" placeholder="Number, or write it" autocapitalize="characters"></div>'
     + '<div class="fld"><label>Amount</label>'
     + '<input data-l="amount" value="' + esc(amount || '') + '" inputmode="decimal"></div>'
     + '</div>' + (i > 0 ? '<button type="button" class="mini" data-rmline="' + i + '">REMOVE</button>' : '')
@@ -441,6 +487,7 @@ export function drawQueue(host, rows, ctx) {
       '<span class="nm">', esc(r.vendor || 'No vendor'), ' · $', money(r.amount || 0), '</span>',
       '<span class="sub">', esc(r.byName || ''), ' · ',
       n > 1 ? ('split across ' + n + ' jobs') : ('SO ' + esc((r.soList || [])[0] || '—')),
+      r.needsSO ? ' · needs a service order' : '',
       r.invoiceDate ? ' · ' + esc(r.invoiceDate) : '', '</span></span>',
       '<span class="ct">›</span></button>');
   });
@@ -473,12 +520,19 @@ export function drawRecord(host, r, ctx) {
 
   h.push('<h2 class="sec">Coded to</h2><table class="tbl"><tbody>');
   lines.forEach(l => h.push('<tr><td>', esc(l.so), ' ', esc(l.label || ''),
+    l.free ? ' <b class="bad">(as written — needs a service order)</b>' : '',
     '</td><td class="num">$', money(l.amount || 0), '</td></tr>'));
   if (lines.length > 1) {
     h.push('<tr><td><b>Total</b></td><td class="num"><b>$', money(r.amount || 0), '</b></td></tr>');
   }
   h.push('</tbody></table>');
 
+  if (r.needsSO) {
+    h.push('<div class="note warn"><b>Written in words, not a number.</b> ',
+      'Whoever bought this said what it was for rather than which service ',
+      'order — which is the right way round. Put the real one on it when you ',
+      'raise the purchase order.</div>');
+  }
   if (r.note) h.push('<div class="note">', esc(r.note), '</div>');
   if (r.queryNote) h.push('<div class="note warn"><b>Queried.</b> ', esc(r.queryNote), '</div>');
 

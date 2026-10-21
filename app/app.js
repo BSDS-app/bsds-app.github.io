@@ -11,6 +11,7 @@ import * as preop from './preop.js';
 import * as jsa from './jsa.js';
 import * as team from './people.js';
 import * as push from './push.js';
+import * as receipt from './receipts.js';
 import * as fleet from './fleet.js';
 import * as parts from './parts.js';
 import * as alerts from './alerts.js';
@@ -228,6 +229,9 @@ function home() {
     nav.push(['wolist', 'Work orders', 'Called in, waiting to be built']);
   } else if (auth.allow('wo.request')) {
     nav.push(['wolist', 'My work orders', 'What you have rung in']);
+  }
+  if (auth.allow('receipts.log')) {
+    nav.push(['receiptq', 'Receipts', 'Sent in, waiting to be entered']);
   }
   if (auth.allow('users.manage')) {
     nav.push(['people', 'People', 'Who can see what']);
@@ -634,6 +638,94 @@ async function notify() {
   }
 }
 
+/* ---------- receipts ---------------------------------------------------- */
+/* The photo path is unchanged - it still goes to the Apps Script backend
+   that writes it to Drive and reads it with Claude. What is new is that
+   the service order is picked rather than typed, and that one receipt can
+   be split across more than one of them. */
+
+let rctx = { picks: [], driveFileUrl: '', driveFileId: '' };
+
+async function receiptPicks() {
+  let was = [];
+  try { was = await wo.list(); } catch (e) { /* standing buckets alone is fine */ }
+  return receipt.pickList(was);
+}
+
+async function receiptForm() {
+  chrome('Receipt', 'Send one in');
+  if (!auth.allow('receipts.submit')) {
+    $('view').innerHTML = '<div class="wrap"><div class="note warn"><b>Not your '
+      + 'account to use.</b></div></div>';
+    return;
+  }
+  $('view').innerHTML = loading;
+  rctx = { picks: await receiptPicks(), driveFileUrl: '', driveFileId: '' };
+  receipt.drawForm($('view'), rctx);
+  resetLines();
+}
+
+/* The first line carries the whole amount, because one job is what usually
+   happens. Splitting is a deliberate extra act, not the default. */
+function resetLines() {
+  const host = $('rlines');
+  if (!host) return;
+  host.innerHTML = receipt.lineRow(0, '', '');
+  syncLines();
+}
+
+function syncLines() {
+  const amt = ($('r_amount') || {}).value || '';
+  const rows = [...document.querySelectorAll('[data-line]')];
+  if (rows.length === 1) {
+    const only = rows[0].querySelector('[data-l="amount"]');
+    if (only && !only.value) only.value = String(amt).replace(/[$,\s]/g, '');
+  }
+  const left = $('rleft');
+  if (!left) return;
+  const total = receipt.cents(amt);
+  const sum = rows.reduce((a, r) => {
+    const c = receipt.cents((r.querySelector('[data-l="amount"]') || {}).value || '0');
+    return a + (isFinite(c) ? c : 0);
+  }, 0);
+  if (!isFinite(total) || rows.length < 2) { left.textContent = ''; return; }
+  const diff = total - sum;
+  left.className = diff === 0 ? 'hint good' : 'hint bad';
+  left.textContent = diff === 0
+    ? 'The lines add up.'
+    : (diff > 0 ? '$' + receipt.money(diff) + ' still to put somewhere.'
+                : '$' + receipt.money(-diff) + ' more than the receipt.');
+}
+
+async function receiptQueue() {
+  chrome('Receipts', 'Waiting on the office');
+  if (!auth.allow('receipts.log')) {
+    $('view').innerHTML = '<div class="wrap"><div class="note warn"><b>Not your '
+      + 'account to read.</b> Receipts are the office and the owners.</div></div>';
+    return;
+  }
+  $('view').innerHTML = loading;
+  try {
+    const rows = await receipt.list({ status: 'new' });
+    receipt.drawQueue($('view'), rows, {});
+  } catch (e) { $('view').innerHTML = oops(e, 'read the receipts'); }
+}
+
+async function receiptRecord(id) {
+  chrome('Receipt', 'As sent in');
+  $('view').innerHTML = loading;
+  try {
+    const rows = await receipt.list({});
+    const r = rows.find(x => x.id === id);
+    if (!r) { $('view').innerHTML = '<div class="wrap"><div class="empty">No such '
+      + 'receipt.</div></div>'; return; }
+    receipt.drawRecord($('view'), r, {
+      canWork: auth.allow('receipts.log'),
+      canOpenImage: auth.allow('receipts.images'),
+    });
+  } catch (e) { $('view').innerHTML = oops(e, 'open it'); }
+}
+
 /* ---------- work orders ------------------------------------------------ */
 /* Owners and office read the roster; a tech does not. It is fetched when it
    can be and the field falls back to free text when it cannot - so the form
@@ -879,6 +971,7 @@ function draw() {
   if (v === 'wo') { woForm(); return; }
   if (v === 'wolist') { woList(); return; }
   if (v === 'worec') { woRecord(route.arg); return; }
+  if (v === 'rrec') { receiptRecord(route.arg); return; }
   if (v === 'equipment') equipment();
   else if (v === 'customer') customer(route.arg);
   else if (v === 'rig') machine(route.arg);
@@ -886,11 +979,48 @@ function draw() {
   else if (v === 'logs') logs();
   else if (v === 'people') { people(); return; }
   else if (v === 'notify') { notify(); return; }
+  else if (v === 'receipt') { receiptForm(); return; }
+  else if (v === 'receiptq') { receiptQueue(); return; }
   else if (v === 'perms') perms();
   else home();
 }
 
 /* ---------- events ---------------------------------------------------- */
+document.addEventListener('change', async (e) => {
+  const photo = e.target.closest('#rphoto');
+  if (photo && photo.files && photo.files[0]) {
+    const msg = $('rscan');
+    msg.className = 'msg';
+    msg.textContent = 'Saving the photo…';
+    try {
+      const out = await receipt.scan(photo.files[0]);
+      rctx.driveFileUrl = out.driveFileUrl || '';
+      rctx.driveFileId = out.driveFileId || '';
+      ['vendor', 'invoiceNumber', 'invoiceDate', 'amount'].forEach(k => {
+        const el = $('r_' + k);
+        if (el && out[k] && !el.value) el.value = out[k];
+      });
+      if (out.docType && $('r_docType')) $('r_docType').value = out.docType;
+      syncLines();
+      msg.className = out.ocrError ? 'msg' : 'msg good';
+      /* A failed read is not a failed receipt: the photo is already in
+         Drive, which is the part that cannot be done again later. */
+      msg.textContent = out.ocrError
+        ? 'Photo saved. It could not be read, so fill the fields in yourself.'
+        : 'Photo saved and read. Check what it found before sending.';
+    } catch (err) {
+      msg.className = 'msg bad';
+      msg.textContent = (err && err.message) || 'The photo did not go through.';
+    }
+    return;
+  }
+  if (e.target.closest('[data-l="amount"]') || e.target.closest('#r_amount')) syncLines();
+});
+
+document.addEventListener('input', (e) => {
+  if (e.target.closest('#r_amount') || e.target.closest('[data-l="amount"]')) syncLines();
+});
+
 document.addEventListener('click', async (e) => {
   const d = e.target.closest('[data-demo]');
   if (d) { auth.demoSignIn(d.dataset.demo); return; }
@@ -898,6 +1028,92 @@ document.addEventListener('click', async (e) => {
   if (tl) { go('tool', tl.dataset.tool); return; }
   const g = e.target.closest('[data-go]');
   if (g) { go(g.dataset.go, null); return; }
+
+  /* ---- receipts ---- */
+  const addLine = e.target.closest('#raddline');
+  if (addLine) {
+    const host = $('rlines');
+    host.insertAdjacentHTML('beforeend',
+      receipt.lineRow(document.querySelectorAll('[data-line]').length, '', ''));
+    syncLines();
+    return;
+  }
+  const rmLine = e.target.closest('[data-rmline]');
+  if (rmLine) {
+    const row = rmLine.closest('[data-line]');
+    if (row) row.remove();
+    syncLines();
+    return;
+  }
+  const rrec = e.target.closest('[data-rrec]');
+  if (rrec) { go('rrec', rrec.dataset.rrec); return; }
+
+  const rsend = e.target.closest('#rsend');
+  if (rsend) {
+    const out = receipt.collect($('view'), rctx);
+    if (out.problems.length) {
+      showProblems($('rmsg'), out, $('view'));
+      return;
+    }
+    rsend.disabled = true;
+    $('rmsg').className = 'msg';
+    $('rmsg').textContent = 'Sending…';
+    try {
+      const saved = await receipt.file(out.rec);
+      /* The old sheet still gets its copy during the changeover. If that
+         fails the receipt is already filed here, so it is reported and
+         not treated as a failure. */
+      const sheet = await receipt.alsoSheet(out.rec);
+      receipt.drawRecord($('view'), saved, {
+        canWork: auth.allow('receipts.log'),
+        canOpenImage: auth.allow('receipts.images'),
+      });
+      if (sheet && sheet.ok === false) {
+        $('view').insertAdjacentHTML('beforeend',
+          '<div class="wrap"><div class="note warn"><b>Filed here, but the old '
+          + 'spreadsheet did not get its copy.</b> Nothing is lost — tell Mike '
+          + 'so the two can be squared up.</div></div>');
+      }
+    } catch (err) {
+      rsend.disabled = false;
+      $('rmsg').className = 'msg bad';
+      $('rmsg').textContent = (err && err.message) || 'That did not send.';
+    }
+    return;
+  }
+
+  const rEntered = e.target.closest('[data-rentered]');
+  if (rEntered) {
+    const po = ($('r_po') || {}).value || '';
+    const msg = $('rqmsg');
+    if (!String(po).trim()) {
+      msg.className = 'msg bad';
+      msg.textContent = 'Put the Fullbay purchase order number on it first — that '
+        + 'number is what ties the two together later.';
+      return;
+    }
+    rEntered.disabled = true;
+    try {
+      await receipt.markEntered(rEntered.dataset.rentered, po);
+      receiptRecord(rEntered.dataset.rentered);
+    } catch (err) {
+      rEntered.disabled = false;
+      msg.className = 'msg bad';
+      msg.textContent = (err && err.message) || 'That did not work.';
+    }
+    return;
+  }
+
+  const rQuery = e.target.closest('[data-rquery]');
+  if (rQuery) {
+    const why = window.prompt('What needs looking at?');
+    if (why === null) return;
+    try {
+      await receipt.flag(rQuery.dataset.rquery, why);
+      receiptRecord(rQuery.dataset.rquery);
+    } catch (err) { alertish(err); }
+    return;
+  }
 
   if (e.target.id === 'pon' || e.target.id === 'poff') {
     const btn = e.target;

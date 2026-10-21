@@ -54,6 +54,7 @@ button is not security — anybody can open the browser console.
 | `workorders.js` | work order requests, and the service order number coming back |
 | `alerts.js` | the band on the home screen: what is waiting on whoever just opened it |
 | `push.js`, `sw.js` | the half that reaches a phone when nobody has opened the app |
+| `receipts.js` | receipts: the photo path unchanged, the coding and the office worklist new |
 | `functions/index.js` | the sender. Two pushes, and the reason there are only two |
 | `icons.js` | the line icons on the tiles |
 | `manifest.json` | what Add to Home Screen uses: the name, the logo, the navy |
@@ -61,7 +62,7 @@ button is not security — anybody can open the browser console.
 | `forms/jsa.v1.json` | the JSA — 12 MSHA hazard categories, 3 conditional permits, 79 answerable items |
 | `forms/build_*.py` | how those files were built, and the count gates that prove no line went missing |
 | `seed/` | 15 customers and 77 rigs from the Fullbay export |
-| `test/` | 176 shell, 259 Pre-Op, 164 JSA, 88 Parts, 73 Fleet, 48 People, 34 Alerts, 74 Work Order, 66 Push, 126 rule, 227 emulator checks |
+| `test/` | 176 shell, 259 Pre-Op, 164 JSA, 88 Parts, 73 Fleet, 48 People, 34 Alerts, 74 Work Order, 66 Push, 56 Receipt, 132 rule, 92 emulator scenarios |
 
 Until `config.js` has a Firebase key the app runs in **demo mode**: a person
 picker instead of a sign-in form, no network, nothing written. The screens are
@@ -310,6 +311,57 @@ go and find rather than an invoice to pay.
 
 ---
 
+## Receipts
+
+**The photo path is unchanged.** It still goes to the same Apps Script
+backend that has always written it to the same Drive folder — and that
+backend already reads the receipt with Claude and hands back the vendor,
+invoice number, date and amount. None of that was rebuilt. Jazmine keeps
+working out of the accounting folder exactly as before.
+
+What is new is the coding on top of it.
+
+**The service order is picked, not typed.** The old log has `Tr990`,
+`820 fuel` and `Management approved` in its work order column. Every one of
+those is a real Fullbay service order that somebody could not put a number
+to while standing at a parts counter. That is not carelessness, it is a
+missing picker — so there is one now, covering fuel, shop supplies, small
+tools, training and every truck without needing any export at all.
+
+**A receipt can be split across several jobs, and the split must add up.**
+One card swipe for a part and a tin of shop supplies is two different
+jobs, and Fullbay structurally cannot say so: one purchase order belongs to
+one service order. Lumping it either overcharges the customer or quietly
+eats the shop supply recovery. The form shows what is still unaccounted for
+as you type, and refuses a receipt whose lines do not come to the total —
+including a penny out, which is the version nobody finds until the books
+are being closed.
+
+**There is no "paid" field, on purpose.** Payment lives in QuickBooks and
+Melio. The old sheet had one and nobody ever updated it — its own
+due-date formula reads `#N/A` as a result. That is what an unowned
+duplicate looks like from the inside.
+
+**The office gets a worklist, not a pile.** Everything needed to raise the
+purchase order and the bill is on one row with the image beside it, and
+marking it entered records the Fullbay PO number. That number is the join
+key that later answers *which purchase orders have no receipt against
+them* — a question nothing can answer today, which is why every Attachments
+column in Fullbay reads 0.
+
+**During the changeover the old spreadsheet still gets its row.** That is
+deliberate duplication with an owner and an end date: turn off
+`receipts.alsoWriteSheet` in `config.js` the day the office works from the
+worklist instead. A split cannot be written to that sheet — it has one work
+order column — so the cell says `SPLIT` and lists the service orders, which
+is true and visible rather than silently recording a part as the whole.
+
+A tech sends receipts in and reads none of them back — not the log, not the
+images. That was a hard rule before any of this was built, and it is
+enforced in `firestore.rules`, not just on the screen.
+
+---
+
 ## Parts
 
 Three states and nothing clever: **open** (a tech has asked, nobody has
@@ -489,6 +541,7 @@ node test/parts.test.mjs      # request to order to received, and the line with 
 node test/alerts.test.mjs     # the home band, including that a quiet shop shows nothing
 node test/workorders.test.mjs # a tech rings one in, the office builds it, the number comes back
 node test/push.test.mjs       # the two notifications, and the files that have to agree about them
+node test/receipts.test.mjs   # the coding, and the split that has to add up
 node test/rules.static.mjs    # roles.js and firestore.rules still agree
 ```
 
@@ -513,7 +566,10 @@ you put real data in**:
 npx firebase emulators:exec --only firestore "node test/rules.test.mjs"
 ```
 
-That one is the real proof. It starts a Firestore, signs in as a tech, and
+That one is the real proof — **92 named scenarios holding 146 assertions**, run
+against a real database rather than against the app. (An earlier version of
+this file said 227 checks; that was a miscount of `await` lines.) It starts a
+Firestore, signs in as a tech, and
 tries to read the master log, the receipts, somebody else's JSA and the
 personnel file — and fails if any of them come back. It also checks a tech
 cannot promote themselves, cannot write a service order number onto his own

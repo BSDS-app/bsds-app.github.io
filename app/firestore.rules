@@ -160,7 +160,13 @@ service cloud.firestore {
        the image. The image itself is in Storage; storage.rules carries
        the matching rule. */
     match /receipts/{id} {
-      allow create: if staff() && mine(request.resource.data);
+      /* Filed as 'new' and with no purchase order number on it. The number
+         is the office's to write when they raise the PO in Fullbay, and it
+         is the join key that later answers "which POs have no receipt" -
+         so a client that could set it could quietly break that answer. */
+      allow create: if staff() && mine(request.resource.data)
+                    && request.resource.data.status == 'new'
+                    && request.resource.data.poNumber == '';
       allow read:   if isOwner() || isOffice();
       allow update: if isOwner() || isOffice();
       allow delete: if isOwner();

@@ -74,6 +74,54 @@ export const CONFIG = {
     },
   },
 
+  /* Receipts.
+   *
+   * `standingSOs` are the overhead service orders as they stand in Fullbay
+   * (read off it 20 Oct 2026). They are listed here rather than exported
+   * because they change about once a year, and they cover fuel, shop
+   * supplies, training, small tools and every truck - which is most of
+   * what anybody buys standing at a counter.
+   *
+   * `vendors` is a seed list for the type-ahead, taken from the vendors
+   * already in the receipts log and on Fullbay purchase orders. Typing a
+   * new name is still allowed; the list exists so that "Crus" and
+   * "CRUS OIL INC." stop being two different companies.
+   *
+   * `alsoWriteSheet` keeps the old Receipts and Invoices spreadsheet fed
+   * during the changeover. Turn it off the day the office works from the
+   * worklist instead. */
+  receipts: {
+    alsoWriteSheet: true,
+    standingSOs: [
+      { so: '1519', label: 'Management approved' },
+      { so: '1520', label: 'Shop supplies' },
+      { so: '1521', label: 'Fuel — all trucks' },
+      { so: '1522', label: 'Training' },
+      { so: '1523', label: 'Small tools' },
+      { so: '1524', label: 'Monthly expenses' },
+      { so: '1551', label: "Clint's truck — 415" },
+      { so: '1550', label: "Noah's truck — 272" },
+      { so: '1552', label: "Stew's truck — 990" },
+      { so: '1548', label: "Stew's truck — 998" },
+      { so: '1553', label: 'F-750 — 490' },
+      { so: '1565', label: 'Truck 820' },
+    ],
+    payments: [
+      "Mike's Credit Card",
+      "Stew's Credit Card",
+      'Company Card',
+      'Charge Account',
+      'Cash',
+    ],
+    vendors: [
+      '425 Manufacturing Inc', 'Arnold Machinery', 'CRUS OIL INC.',
+      'DTS Fluid Power', 'Epiroc', 'GOOD 2 GO', 'Hose and Rubber',
+      'Maverik', 'Mincon Inc.', 'Modern Machinery', 'NAPA',
+      'Palmer Johnson Power Systems', 'Sandvik', 'Walmart',
+      'Wheeler Machinery Co.',
+    ],
+  },
+
   retention: {
     preop: { days: 395, label: '13 months', formVersion: 1 },
     jsa:   { days: 395, label: '13 months', formVersion: 1 },
@@ -101,9 +149,14 @@ export const CONFIG = {
       blurb: 'The spreadsheet version, until the changeover is finished',
     },
     receipts: {
-      url: 'https://bsds-app.github.io/', title: 'Send a Receipt', cap: 'receipts.submit',
+      route: 'receipt', title: 'Send a Receipt', cap: 'receipts.submit',
       tone: 'teal', icon: 'receipt',
-      blurb: 'On the Launcher’s Receipts tab',
+      blurb: 'Photo, then what it was for',
+    },
+    receiptsOld: {
+      url: 'https://bsds-app.github.io/', title: 'Send a Receipt (old app)',
+      cap: 'receipts.submit', tone: 'muted', icon: 'receipt',
+      blurb: 'The Launcher’s Receipts tab, until the changeover is finished',
     },
     partsOrder: {
       route: 'parts', title: 'Order Parts', cap: 'parts.request',

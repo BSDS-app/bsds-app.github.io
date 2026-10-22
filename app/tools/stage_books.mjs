@@ -450,14 +450,51 @@ export async function run(argv, opts) {
         P.plan.files.push({ full, rel, size });
         const n = c.key.split('-')[0].replace(/^0(?=\d)/, '');
         const [name, rest] = String(c.title).split(/ — (.*)/s);
+        /* `ch` lets a part search point at the piece a part is printed in */
         sp.files.push({ p: rel, t: (c.key === '00' ? '' : n + '. ') + niceTitle(name) + (rest ? ' — ' + rest : ''),
-                        b: size, pages: [c.from, c.to] });
+                        b: size, pages: [c.from, c.to], ch: c.key });
       });
       sp.files.sort((a, b) => a.p.localeCompare(b.p, 'en', { numeric: true }));
       const biggest = Math.max(...chunks.map(c => fs.statSync(path.join(outDir, c.file)).size));
       log(`${P.id}: ${big.rel} is kept as ${chunks.length} pieces, the largest ${(biggest / 1048576).toFixed(0)} MB.`);
     }
   }
+
+  /* A PART INDEX FOR A CD THAT HAS NONE. Most CDs ship Indexlist/*.txt; a
+     few do not (the DI650 82517, the DX800 S5 68792). For those, the index
+     is read off the printed parts lists themselves (tools/text_index.mjs) -
+     checked against a CD that does have one, it finds 4,138 of its 4,139.
+     Remembered per file by path, size and date, so it is read once. */
+  const tiFile = path.join(stage, '.textindex.json');
+  let ti = {};
+  try { ti = JSON.parse(fs.readFileSync(tiFile, 'utf8')); } catch (e) { ti = {}; }
+  for (const P of plans) {
+    if (P.plan.index || o.textIndex === false) continue;
+    const sp = P.plan.manifest.sections.find(s => s.key === 'sp');
+    if (!sp) continue;
+    const full = {};
+    P.plan.files.forEach(f => { full[f.rel] = f.full; });
+    let rows = [];
+    for (const f of sp.files.filter(x => x.ch && full[x.p])) {
+      const st = fs.statSync(full[f.p]);
+      const k = full[f.p] + '|' + st.size + '|' + Math.round(st.mtimeMs) + '|' + f.ch;
+      if (!ti[k]) {
+        try {
+          const { buildFromPdf } = await import('./text_index.mjs');
+          ti[k] = await buildFromPdf(full[f.p], f.ch);
+        } catch (e) { ti[k] = []; }                 /* a damaged chapter just has no rows */
+      }
+      rows = rows.concat(ti[k]);
+    }
+    if (rows.length) {
+      P.plan.index = { v: 1, source: 'printed parts lists',
+        cols: ['part', 'desc', 'chapter', 'asmNo', 'asm', 'qty', 'pos', 'page'], rows };
+      P.plan.manifest.parts = rows.length;
+      log(`${P.id}: no index on the CD - ${rows.length} parts read off its printed lists.`);
+    }
+  }
+  fs.mkdirSync(stage, { recursive: true });
+  fs.writeFileSync(tiFile, JSON.stringify(ti));
 
   /* NAMED LIKE THE CD. A spare-parts chapter is listed by the name the CD
      gives it - "11. Carrier", "7. Feed" - not by its file number or a guess

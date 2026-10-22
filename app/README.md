@@ -418,6 +418,22 @@ rock-drill parts in the 110T15405-1 book, whose tables are not text, and one
 broken index line (`4021238disch`) in each Pantera book. Run it after any
 change to matching or re-staging: `node tools/check_parts.mjs`.
 
+**Checks you can run on the workstation** (all read-only):
+
+- `node tools/check_parts.mjs` — every indexed part, opened the way a phone does.
+- `node tools/check_pdfs.mjs` — every staged PDF, opened with the app's own
+  viewer. As of 22 Oct 2026 one fails: **DX800 S5 68792 `sp/11.pdf`** (its
+  Carrier chapter) is all zeros on the D: drive itself — a bad copy, dated a
+  month after its siblings. It needs re-copying from the original CD.
+- `gcloud storage ls --recursive --long gs://bsds-app.firebasestorage.app/books/** > list.txt`
+  then `node tools/check_bucket.mjs list.txt` — every file the app can ask
+  for is in the bucket, at the right size, and nothing there is unused.
+- `node tools/text_index.mjs --compare <book>` / `--build <book>` — a part
+  index read off the printed parts lists, for the books whose CD has none
+  (82517, 68792). Measured against 34965's real index it finds 4,138 of
+  4,139. Built for review only (`index.text.json` in staging); the app does
+  not read it yet.
+
 **Named like the CD.** Each chapter is listed by the name the CD gives it —
 its own first bookmark: "7. Feed", "9. Boom", "11. Carrier", "12. Powerpack".
 Files the CD names nowhere get a translation of their Toolman file name

@@ -180,8 +180,11 @@ await ok('only an owner deletes a pre-op by hand', async () => {
   await assertSucceeds(deleteDoc(doc(as('mike'), 'preops/p3')));
 });
 await ok('a tech sends a receipt in and cannot read it back', async () => {
-  await assertSucceeds(setDoc(doc(as('clint'), 'receipts/r9'), { uid: 'clint', amount: 7 }));
-  await assertFails(getDoc(doc(as('clint'), 'receipts/r9')));
+  /* filed the way the app files one: new, and no PO number (that is the
+     office's to write) - see the receipts scenarios further down */
+  await assertSucceeds(setDoc(doc(as('clint'), 'receipts/r7early'),
+    { uid: 'clint', amount: 7, status: 'new', poNumber: '' }));
+  await assertFails(getDoc(doc(as('clint'), 'receipts/r7early')));
 });
 await ok('a tech reads their own JSA but not another tech’s', async () => {
   await assertSucceeds(getDoc(doc(as('clint'), 'jsas/j1')));

@@ -21,6 +21,7 @@
 import { DEMO } from './config.js';
 import * as auth from './auth.js';
 import { icon } from './icons.js';
+import { pageKey, onPage, itemsFor } from './partmatch.js';
 
 const esc = s => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -385,14 +386,21 @@ export async function openPdf(host, blob, url, opts) {
     g.fillStyle = 'rgba(232,100,28,.28)';
     g.strokeStyle = '#e8641c';
     g.lineWidth = Math.max(2, px * 1.5);
-    tc.items.forEach(it => {
-      if (key(it.str).indexOf(pk) < 0) return;
-      const t = it.transform;
-      const h = it.height || Math.hypot(t[2], t[3]) || 10;
-      /* the text box runs from just under the baseline to the cap height */
-      const r = vp.convertToViewportRectangle([t[4], t[5] - h * 0.22, t[4] + it.width, t[5] + h * 0.78]);
-      const x = Math.min(r[0], r[2]) - 3 * px, y = Math.min(r[1], r[3]) - 1.5 * px;
-      const w = Math.abs(r[2] - r[0]) + 6 * px, hh = Math.abs(r[3] - r[1]) + 3 * px;
+    /* one box round each place it is printed - the number may be one piece
+       of text or several (046 / 001 / 70), so the box spans all of them */
+    itemsFor(pageKey(tc.items), part).forEach(group => {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      group.forEach(i => {
+        const it = tc.items[i];
+        const t = it.transform;
+        const h = it.height || Math.hypot(t[2], t[3]) || 10;
+        /* the text box runs from just under the baseline to the cap height */
+        const r = vp.convertToViewportRectangle([t[4], t[5] - h * 0.22, t[4] + it.width, t[5] + h * 0.78]);
+        x0 = Math.min(x0, r[0], r[2]); x1 = Math.max(x1, r[0], r[2]);
+        y0 = Math.min(y0, r[1], r[3]); y1 = Math.max(y1, r[1], r[3]);
+      });
+      if (!isFinite(x0)) return;
+      const x = x0 - 3 * px, y = y0 - 1.5 * px, w = x1 - x0 + 6 * px, hh = y1 - y0 + 3 * px;
       g.fillRect(x, y, w, hh);
       g.strokeRect(x, y, w, hh);
     });
@@ -407,19 +415,26 @@ export async function openPdf(host, blob, url, opts) {
   /* Find the part. The first page it is on is drawn straight away; the rest
      of the chapter is still searched so the other places it appears can be
      listed - a part is often on the parts list AND a kit. */
+  /* partmatch.js decides what counts - the same rules tools/check_parts.mjs
+     proves against every part in every book. Whole numbers first; only if no
+     page has it whole is a looser match taken. */
   let first = true;
+  const keys = [];
   for (let i = 1; i <= n; i++) {
     if (me !== VIEW) return;
     if (first && i % 5 === 1) msg('Looking for ' + esc(part) + '… page ' + i + ' of ' + n);
-    let txt = '';
-    try { txt = (await (await doc.getPage(i)).getTextContent()).items.map(x => x.str).join(' '); }
+    try { keys[i] = pageKey((await (await doc.getPage(i)).getTextContent()).items); }
     catch (e) { continue; }
-    if (key(txt).indexOf(pk) < 0) continue;
+    if (!onPage(keys[i], part, true)) continue;
     hits.push(i);
     if (first) { first = false; await render(i); }
     showHits();
   }
   if (me !== VIEW) return;
+  if (!hits.length) {
+    for (let i = 1; i <= n; i++) if (keys[i] && onPage(keys[i], part)) hits.push(i);
+    if (hits.length) { await render(hits[0]); showHits(true); return; }
+  }
   if (!hits.length) {
     msg('<b>' + esc(part) + ' is not printed in this chapter.</b> The index may point at a '
       + 'kit or an assembly that lists it differently — check the contents page.');

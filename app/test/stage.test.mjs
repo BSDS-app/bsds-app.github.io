@@ -254,6 +254,37 @@ ok(flat.length === 3 && flat[2].from === 321 && flat[2].to === 400, 'a big file 
   ok(!fs.readdirSync(S).some(n => /^\.split-/.test(n)) === false, 'the cut is remembered, so it is done once');
 }
 
+/* ---- names the way the CD has them ------------------------------------- */
+{
+  const { niceTitle, fileTitle } = await import('../tools/stage_books.mjs');
+  ok(niceTitle('ROCK DRILL') === 'Rock Drill' && niceTitle('POWERPACK') === 'Powerpack',
+    'chapter names read like the CD, without the shouting');
+  ok(niceTitle('HYDRAULIC AND PNEUMATIC DIAGRAMS') === 'Hydraulic and Pneumatic Diagrams', 'small words stay small');
+  ok(niceTitle('LEOPARD DI650I') === 'Leopard DI650I', 'model names keep their capitals');
+  ok(fileTitle('conws.pdf') === 'Workshop Manual — Contents' && fileTitle('rockdrill.pdf') === 'Rock Drill',
+    'the CD’s cryptic file names are translated');
+  ok(fileTitle('PM SEBP7144-03-00-ALL.pdf') === 'Parts Manual SEBP7144-03-00', 'and the Cat ones');
+  ok(fileTitle('carrier.pdf') === 'Carrier', 'anything else keeps its own name, tidied');
+}
+
+/* ---- finding a part on a printed page (partmatch.js, shared with the app) */
+{
+  const { partKeys, pageKey, onPage, itemsFor } = await import('../partmatch.js');
+  const items = (...s) => s.map(str => ({ str }));
+  ok(partKeys('04600170a').join() === '04600170A,04600170',
+    'THE POINT: the index’s revision letter is dropped to find the printed number', partKeys('04600170a').join());
+  ok(partKeys('AF00100008a').join() === 'AF00100008A,AF00100008', 'on lettered numbers too');
+  ok(partKeys('BG00334706').length === 1, 'a capital letter is part of the number and stays');
+  const spaced = pageKey(items('4', '046 001 70', 'Valve, Check', '1'));
+  ok(onPage(spaced, '04600170a', true) === '04600170', 'a spaced, printed number is found whole');
+  const split = pageKey(items('4', '046', '001', '70', 'Valve'));
+  ok(onPage(split, '04600170a', true) && itemsFor(split, '04600170a')[0].join() === '1,2,3',
+    'and when it comes out of the PDF in pieces, all the pieces are marked');
+  const inside = pageKey(items('1046001701', 'Other'));
+  ok(!onPage(inside, '04600170a', true) && !!onPage(inside, '04600170a'),
+    'a number buried inside a longer one is not a whole match - only a last resort');
+}
+
 /* inlineFigures on its own: no fig folder means nothing changes */
 ok(inlineFigures('"fig/p1.webp"', path.join(T, 'nope')).count === 0, 'no fig folder, no change');
 

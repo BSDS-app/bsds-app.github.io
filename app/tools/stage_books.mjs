@@ -234,15 +234,78 @@ export function chunksFor(chapters, numPages, maxPages) {
   return out;
 }
 
+/* "ROCK DRILL" -> "Rock Drill". The CDs shout; the app does not. Short joining
+   words stay small, and anything with a digit (DX800, 3/2) is left alone. */
+export function niceTitle(s) {
+  const small = new Set(['and', 'or', 'of', 'the', 'for', 'to', 'in', 'on', 'with', 'a']);
+  const keep = new Set(['USA', 'US', 'EU', 'CE', 'ECU', 'PLC', 'LED', 'GPS', 'CAT', 'AC', 'DC', 'HVAC',
+                        'UK', 'SMC', 'TIM', 'RCS', 'CAN', 'ROPS', 'FOPS']);
+  return String(s || '').trim().replace(/\s+/g, ' ').split(' ').map((w, i) => {
+    if (/\d/.test(w) || keep.has(w)) return w;
+    const l = w.toLowerCase();
+    if (i > 0 && small.has(l)) return l;
+    return l.replace(/(^|[-/(&])([a-z])/g, (m, a, b) => a + b.toUpperCase());
+  }).join(' ');
+}
+
+/* Files the CD gives no name inside, by what their file names mean on every
+   Toolman CD. Anything not here keeps its own (tidied) file name. */
+const KNOWN = {
+  conws: 'Workshop Manual — Contents', conma: 'Maintenance Manual — Contents',
+  conop: 'Operator’s Manual — Contents', consp: 'Parts Manual — Contents', content: 'Contents',
+  contents: 'Contents', rockdrill: 'Rock Drill', dust: 'Dust Collector', rod: 'Rod Handling',
+  safetyinstructions: 'Safety Instructions', home: 'CD Home Page', info: 'About This CD', help: 'CD Help',
+  maintenance_manual: 'Maintenance Manual', operators_manual: 'Operator’s Manual',
+  warrant_eng_ger: 'Warranty (English / German)', dxped_vakuutus_en: 'Pressure Equipment Declaration',
+  start: 'Rock Tools', cathome: 'Cat Engine Manuals',
+};
+export function fileTitle(name) {
+  const base = String(name || '').replace(/\.pdf$/i, '');
+  const k = base.toLowerCase();
+  if (KNOWN[k]) return KNOWN[k];
+  let m = base.match(/^OM\s+(SEBU[\w-]+)/i);
+  if (m) return 'Operation & Maintenance Manual ' + m[1].replace(/-ALL$/i, '');
+  m = base.match(/^PM\s+(SEBP[\w-]+)/i);
+  if (m) return 'Parts Manual ' + m[1].replace(/-ALL$/i, '');
+  m = base.match(/^CE\s+Englanti/i);
+  if (m) return 'CE Declaration (English)';
+  return niceTitle(base.replace(/_/g, ' '));
+}
+
+/* What the CD calls a spare-parts chapter: its own first bookmark, which is
+   also the heading on its first page - FEED, BOOM, CARRIER, POWERPACK.
+   Read with MuPDF (one of the CD's PDFs is damaged enough to crash pdf.js),
+   and remembered in `cache` by path, size and date. */
+async function cdTitle(file, cache) {
+  const st = fs.statSync(file);
+  const k = file + '|' + st.size + '|' + Math.round(st.mtimeMs);
+  if (cache[k] !== undefined) return cache[k];
+  let t = '';
+  try {
+    const mupdf = await import('mupdf');
+    const doc = mupdf.Document.openDocument(fs.readFileSync(file), 'application/pdf');
+    const ol = doc.loadOutline() || [];
+    t = String((ol[0] && ol[0].title) || '').trim();
+    if (!t && doc.countPages()) {
+      t = doc.loadPage(0).toStructuredText().asText().split('\n').map(x => x.trim()).find(Boolean) || '';
+    }
+    /* a "go back" link is not a name - the next bookmark is */
+    if (/^(back|return) to /i.test(t) && ol[1]) t = String(ol[1].title || '').trim();
+  } catch (e) { t = ''; }
+  cache[k] = t.slice(0, 80);
+  return cache[k];
+}
+
 /* Cut one big PDF into the planned pieces, into `outDir`. Remembered by the
    source's size and date (`side`), so it is done once, not on every run. */
-async function splitPdf(src, outDir, side, maxPages, prefix) {
+async function splitPdf(src, outDir, side, maxPages, prefix, say) {
   const st = fs.statSync(src);
   try {
     const s = JSON.parse(fs.readFileSync(side, 'utf8'));
     if (s.size === st.size && s.mtime === Math.round(st.mtimeMs)
         && s.chunks.every(c => fs.existsSync(path.join(outDir, c.file)))) return s.chunks;
   } catch (e) { /* not done yet */ }
+  if (say) say();
   /* MuPDF, not a pure-JS library: the CD exports are big and not always
      tidy inside (pdf-lib could not find the 82517 book's page list at all),
      and MuPDF reads what viewers read. Only ever run here, on the workstation. */
@@ -374,9 +437,9 @@ export async function run(argv, opts) {
     for (const big of bigs) {
       const outDir = path.join(stage, P.id, 'files', 'sp');
       const side = path.join(stage, '.split-' + P.id + '-' + slug(big.rel) + '.json');
-      log(`${P.id}: ${big.rel} is ${(big.size / 1048576).toFixed(0)} MB in one file - cutting it into chapters…`);
       const chunks = await splitPdf(big.full, outDir, side, o.maxPages,
-        slug(path.basename(big.rel, path.extname(big.rel))));
+        slug(path.basename(big.rel, path.extname(big.rel))),
+        () => log(`${P.id}: ${big.rel} is ${(big.size / 1048576).toFixed(0)} MB in one file - cutting it into chapters…`));
       const sp = P.plan.manifest.sections.find(s => s.key === 'sp');
       sp.files = sp.files.filter(x => x.p !== big.rel);
       P.plan.files = P.plan.files.filter(x => x !== big);
@@ -386,14 +449,53 @@ export async function run(argv, opts) {
         const rel = 'sp/' + c.file;
         P.plan.files.push({ full, rel, size });
         const n = c.key.split('-')[0].replace(/^0(?=\d)/, '');
-        sp.files.push({ p: rel, t: (c.key === '00' ? '' : 'Chapter ' + n + ' — ') + c.title, b: size,
-                        pages: [c.from, c.to] });
+        const [name, rest] = String(c.title).split(/ — (.*)/s);
+        sp.files.push({ p: rel, t: (c.key === '00' ? '' : n + '. ') + niceTitle(name) + (rest ? ' — ' + rest : ''),
+                        b: size, pages: [c.from, c.to] });
       });
       sp.files.sort((a, b) => a.p.localeCompare(b.p, 'en', { numeric: true }));
       const biggest = Math.max(...chunks.map(c => fs.statSync(path.join(outDir, c.file)).size));
-      log(`   ${chunks.length} pieces, the largest ${(biggest / 1048576).toFixed(0)} MB.`);
+      log(`${P.id}: ${big.rel} is kept as ${chunks.length} pieces, the largest ${(biggest / 1048576).toFixed(0)} MB.`);
     }
   }
+
+  /* NAMED LIKE THE CD. A spare-parts chapter is listed by the name the CD
+     gives it - "11. Carrier", "7. Feed" - not by its file number or a guess
+     from the assemblies in it. The assembly guess is only the fallback for
+     a chapter the CD does not name. */
+  const titleFile = path.join(stage, '.titles.json');
+  let tc = {};
+  try { tc = JSON.parse(fs.readFileSync(titleFile, 'utf8')); } catch (e) { tc = {}; }
+  for (const P of plans) {
+    const full = {};
+    P.plan.files.forEach(f => { full[f.rel] = f.full; });
+    /* every file, not just the parts chapters: "maintenance_manual" and
+       "conws" are what the CD calls its files, not what it calls the books */
+    for (const s of P.plan.manifest.sections) {
+      for (const f of s.files) {
+        if (f.pages) continue;                     /* a piece of a cut book is already named */
+        const raw = full[f.p] ? await cdTitle(full[f.p], tc) : '';
+        /* some CDs left junk in the bookmark - "Untitled", "Local Disk", a
+           file name, a web address. Those are not names. */
+        const junk = !raw || /^\d+$/.test(raw) || /^(untitled|local disk|document\d*|page \d+)$/i.test(raw)
+          || /\.(pdf|docx?|com|net|org)$/i.test(raw);
+        const cd = junk ? '' : niceTitle(raw);
+        if (cd) {
+          f.t = (s.key === 'sp' && f.ch ? String(Number(f.ch)) + '. ' : '') + cd;
+        } else if (!(s.key === 'sp' && f.ch)) {
+          f.t = fileTitle(path.basename(f.p));
+        }
+      }
+    }
+    const sp = P.plan.manifest.sections.find(s => s.key === 'sp');
+    if (!sp) continue;
+    /* the numbered chapters first, in the CD's order; its contents pages,
+       identification card and linked diagrams after them */
+    const numbered = f => !!(f.ch || f.pages);
+    sp.files.sort((a, b) => (numbered(b) - numbered(a)) || a.p.localeCompare(b.p, 'en', { numeric: true }));
+  }
+  fs.mkdirSync(stage, { recursive: true });
+  fs.writeFileSync(titleFile, JSON.stringify(tc));
 
   /* STORED ONCE. The CDs repeat themselves - the same Cat engine manual,
      warranty and CD help on most of them. Each file is fingerprinted by its

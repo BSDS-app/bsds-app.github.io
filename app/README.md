@@ -403,6 +403,21 @@ that, the book opened longest ago goes first, and a single file over 120 MB
 is shown but never kept. The Parts books screen says how much this phone is
 holding and has a **Clear** button. Signing out clears it too.
 
+**Finding the part on the page.** The Toolman index writes a revision letter
+after about half its part numbers (`04600170a`); the printed list does not
+(`046 001 70`). `partmatch.js` looks for the number with and without that
+letter, as a whole number first, and the app and `tools/check_parts.mjs` both
+use it. The checker tries every indexed part in every book the way a phone
+does: **47,977 of 47,984 open on their page.** The 7 that do not are five
+rock-drill parts in the 110T15405-1 book, whose tables are not text, and one
+broken index line (`4021238disch`) in each Pantera book. Run it after any
+change to matching or re-staging: `node tools/check_parts.mjs`.
+
+**Named like the CD.** Each chapter is listed by the name the CD gives it —
+its own first bookmark: "7. Feed", "9. Boom", "11. Carrier", "12. Powerpack".
+Files the CD names nowhere get a translation of their Toolman file name
+(`conws` → Workshop Manual — Contents), or their own name tidied.
+
 **One huge file is cut into chapters.** The DI650 82517 CD shipped its whole
 parts book as one PDF — 1,958 pages, 285 MB — which a phone cannot open. The
 stage script cuts any spare-parts file over 60 MB along its own bookmarks,

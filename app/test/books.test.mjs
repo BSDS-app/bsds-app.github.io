@@ -60,8 +60,9 @@ const DEMO_BOOKS = {
   [TM + 'index.json']: JSON.stringify({ v: 1, rows: [
     ['00302748', 'Pin', '16', '05502008f', 'Towing eye', '1', '4', ''],
     ['00302749', 'Pin, long', '16', '05502008f', 'Towing eye', '2', '5', ''],
-    ['03246358', 'Clip', '13', '55190585e', 'Tank Assembly', '1', '*49', '78']] }),
-  [TM + 'files/sp/16.pdf']: makePdf(['TABLE OF CONTENTS 16 TOWING EYE', 'TOWING EYE drawing 1 2 3',
+    ['03246358', 'Clip', '13', '55190585e', 'Tank Assembly', '1', '*49', '78'],
+    ['05502008f', 'Plate', '16', '05502008f', 'Towing eye', '1', '2', '']] }),
+  [TM + 'files/sp/16.pdf']: makePdf(['TABLE OF CONTENTS 16 TOWING EYE', 'TOWING EYE drawing 055 020 08 Plate',
                                      'TOWING EYE parts 00302748 Pin 1']),
   'books/epiroc-d65/manifest.json': JSON.stringify({ v: 1, kind: 'html', id: 'epiroc-d65',
     title: 'D65', lib: 'Epiroc', serial: '', file: 'book.html' }),
@@ -370,6 +371,18 @@ await page.waitForTimeout(500);
 ok(/Page 2 of 3/.test(await pos()), 'one tap back is the drawing', await pos());
 const openHref = await page.getAttribute('#bopen', 'href');
 ok(/^blob:/.test(openHref || ''), 'Open and Save are still there as a way out', openHref);
+
+/* the index writes a revision letter the printed page does not:
+   05502008f in the index, "055 020 08" on the page */
+await page.evaluate(() => sessionStorage.removeItem('bsds.partsBasket'));
+await tap({ 'data-bfile': 'sp/16.pdf', 'data-book': 'tm-ranger-dx800-t4-47047', 'data-part': '05502008f' });
+await page.waitForFunction(() => / is on page /.test((document.getElementById('pvmsg') || {}).textContent || ''),
+  null, { timeout: 20000 }).catch(() => {});
+ok(/Page 2 of 3/.test(await pos()),
+  'THE POINT: a part the index writes with a revision letter still opens on its page', await pos());
+await tap({ 'data-bfile': 'sp/16.pdf', 'data-book': 'tm-ranger-dx800-t4-47047', 'data-part': '00302748' });
+await page.waitForFunction(() => / is on page /.test((document.getElementById('pvmsg') || {}).textContent || ''),
+  null, { timeout: 20000 }).catch(() => {});
 
 /* ---- from the page to a parts request ---------------------------------- */
 await page.evaluate(() => sessionStorage.removeItem('bsds.partsBasket'));

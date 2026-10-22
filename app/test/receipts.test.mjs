@@ -48,7 +48,9 @@ const ok = (c, what, extra) => {
 };
 
 const browser = await chromium.launch({
-  executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  /* the build sandbox keeps its own Chromium; anywhere else, Playwright's */
+  ...(fs.existsSync('/opt/pw-browsers/chromium-1194/chrome-linux/chrome')
+    ? { executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' } : {}),
 });
 
 for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) {
@@ -231,7 +233,9 @@ for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) 
   ok(/add up/i.test(ok2), `${tag} and says so when it balances`, ok2);
 
   await page.locator('#rsend').click();
-  await page.waitForTimeout(1200);
+  /* wait for the record, not a fixed time: a slow PC files slower */
+  await page.waitForFunction(() => !document.querySelector('#rsend'), null, { timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(300);
   const sheet = await page.locator('#view').innerText();
   ok(/NAPA/.test(sheet), `${tag} a balanced split files`, sheet.replace(/\s+/g, ' ').slice(0, 110));
   ok(/1666/.test(sheet) && /1520/.test(sheet),
@@ -261,7 +265,9 @@ for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) 
   await page.evaluate(() => { document.querySelector('[data-r="paymentMethod"]').value = 'Company Card'; });
   await setLine(0, 'SHOP SUPPLIES', '41.20');
   await page.locator('#rsend').click();
-  await page.waitForTimeout(1200);
+  /* wait for the record, not a fixed time: a slow PC files slower */
+  await page.waitForFunction(() => !document.querySelector('#rsend'), null, { timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(300);
   const words = await page.locator('#view').innerText();
   ok(/Walmart/.test(words), `${tag} a receipt written in words files`,
     words.replace(/\s+/g, ' ').slice(0, 100));

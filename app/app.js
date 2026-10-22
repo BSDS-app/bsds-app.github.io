@@ -13,6 +13,7 @@ import * as team from './people.js';
 import * as push from './push.js';
 import * as receipt from './receipts.js';
 import * as book from './books.js';
+import * as bstore from './bookstore.js';
 import * as fleet from './fleet.js';
 import * as parts from './parts.js';
 import * as alerts from './alerts.js';
@@ -454,14 +455,22 @@ async function machineBook(machineId) {
   } catch (e) { $('view').innerHTML = oops(e, 'open it'); }
 }
 
-function books() {
+async function books() {
   chrome('Parts books', 'Library');
+  $('view').innerHTML = loading;
+  try { await book.load(); } catch (e) { /* the library still lists what it can */ }
+  const inApp = bstore.list();
   const h = ['<div class="wrap"><h1 class="pg">Parts books</h1>',
-    '<p class="lede">What has been converted so far. Each one opens in its own tab; ',
-    'they move inside the app once storage is switched on.</p>',
-    '<h2 class="sec">By machine</h2><div class="tiles">'];
-  CONFIG.books.forEach(b => h.push('<a class="tile blue" href="', esc(b.url),
-    '" target="_blank" rel="noopener">',
+    '<p class="lede">', inApp.length
+      ? 'These open inside the app, for anyone signed in. A machine’s own book is also on its page.'
+      : 'Each one opens in its own tab until the books are put up in storage.',
+    '</p><h2 class="sec">In the app</h2><div class="tiles">'];
+  inApp.forEach(s => h.push('<button class="tile blue" data-openbook="', esc(s.id), '">',
+    tileFace(s.title, (s.serial ? 's/n ' + s.serial : 'no serial') + ' · '
+      + (s.kind === 'pdf' ? s.files + ' PDFs' : 'converted'), 'book'), '</button>'));
+  /* A converted book not put up yet still opens where it always has. */
+  CONFIG.books.filter(b => !bstore.forRef(b.id)).forEach(b => h.push(
+    '<a class="tile blue" href="', esc(b.url), '" target="_blank" rel="noopener">',
     tileFace(b.title, b.serial ? 's/n ' + b.serial : 'no serial', 'book'), '</a>'));
   h.push('</div><h2 class="sec">Every machine</h2><div class="list">',
     '<button class="row" data-go="bookcover"><span><span class="nm">Which rigs have a book'
@@ -473,6 +482,65 @@ function books() {
     tileFace(s.title, 'Reference', 'book'), '</a>'));
   h.push('</div></div>');
   $('view').innerHTML = h.join('');
+}
+
+/* One book out of storage. The route carries the machine it was opened from,
+   if any, so a book chosen by judgement keeps its red banner all the way
+   down to the PDF - the warning travels with the book, not with the screen
+   that happened to list it. */
+let BOOK = null;          /* { entry, m, idx } for the book on screen */
+let fileUrl = null;       /* the PDF last handed out, released on the next */
+
+async function judgementBanner(mid) {
+  if (!mid) return '';
+  try {
+    if (!Object.keys(bookPicks).length) bookPicks = await book.picks();
+    return book.banner(book.forMachine(mid, bookPicks));
+  } catch (e) { return ''; }
+}
+
+async function bookView(arg) {
+  const [id, mid] = String(arg || '').split('|');
+  chrome('Parts book', '');
+  $('view').innerHTML = loading;
+  try {
+    await book.load();
+    const entry = bstore.byId(id);
+    if (!entry) throw new Error('That book is not in the app.');
+    const m = await bstore.manifest(entry);
+    const banner = await judgementBanner(mid);
+    chrome(m.title, m.serial ? 's/n ' + m.serial : m.lib);
+    if (entry.kind === 'html') {
+      $('view').innerHTML = '<div class="wrap"><div class="empty">Opening the book… '
+        + esc(entry.mb) + ' MB the first time, then it is kept on this device.</div></div>';
+      const html = await bstore.page(entry, m);
+      if (route.view !== 'book' || route.arg !== arg) return;   /* they left */
+      document.body.classList.add('framed');
+      bstore.drawPage($('view'), html, m.title, { banner });
+      sitFrameUnderBar();
+      return;
+    }
+    BOOK = { entry, m, idx: null, mid };
+    bstore.drawBook($('view'), entry, m, { banner });
+  } catch (e) { $('view').innerHTML = oops(e, 'open the book'); }
+}
+
+async function bookFile(arg) {
+  const [id, rel, mid] = String(arg || '').split('|');
+  chrome('Parts book', rel);
+  $('view').innerHTML = '<div class="wrap"><div class="empty">Fetching ' + esc(rel)
+    + '… the first time takes a moment, then it is kept on this device.</div></div>';
+  try {
+    await book.load();
+    const entry = bstore.byId(id);
+    if (!entry) throw new Error('That book is not in the app.');
+    const b = await bstore.file(entry, rel);
+    if (route.view !== 'bfile' || route.arg !== arg) return;
+    if (fileUrl) URL.revokeObjectURL(fileUrl);
+    fileUrl = URL.createObjectURL(b);
+    const name = entry.title + ' - ' + rel.replace(/\//g, ' ');
+    bstore.drawFile($('view'), name, fileUrl, b.size, { banner: await judgementBanner(mid) });
+  } catch (e) { $('view').innerHTML = oops(e, 'fetch it'); }
 }
 
 /* A tool, shown inside the app. The bar above it stays, so Back goes back to
@@ -1005,6 +1073,8 @@ function draw() {
   if (v === 'worec') { woRecord(route.arg); return; }
   if (v === 'rrec') { receiptRecord(route.arg); return; }
   if (v === 'bookfor') { machineBook(route.arg); return; }
+  if (v === 'book') { bookView(route.arg); return; }
+  if (v === 'bfile') { bookFile(route.arg); return; }
   if (v === 'equipment') equipment();
   else if (v === 'customer') customer(route.arg);
   else if (v === 'rig') machine(route.arg);
@@ -1051,7 +1121,7 @@ document.addEventListener('change', async (e) => {
   if (e.target.closest('[data-l="amount"]') || e.target.closest('#r_amount')) syncLines();
 });
 
-document.addEventListener('input', (e) => {
+document.addEventListener('input', async (e) => {
   if (e.target.closest('#r_amount') || e.target.closest('[data-l="amount"]')) syncLines();
   const bq = e.target.closest('#bq');
   if (bq) {
@@ -1064,6 +1134,21 @@ document.addEventListener('input', (e) => {
     const rows = q ? book.find(q, 40)
       : book.like((book.forMachine(mid, bookPicks).machine) || {}, 40);
     book.drawHits(host, rows, mid);
+  }
+  const bpq = e.target.closest('#bpq');
+  if (bpq && BOOK) {
+    const host = $('bphits');
+    const q = String(bpq.value || '').trim();
+    if (!q) { host.innerHTML = ''; return; }
+    /* The index is fetched the first time somebody types, not when the book
+       opens - most opens are to read a chapter, not to search. */
+    if (!BOOK.idx) {
+      host.innerHTML = '<div class="empty">Loading the part index…</div>';
+      try { BOOK.idx = await bstore.index(BOOK.entry); }
+      catch (err) { host.innerHTML = '<div class="empty">' + esc(err.message) + '</div>'; return; }
+    }
+    if (String(bpq.value || '').trim() !== q) return;   /* typed on meanwhile */
+    bstore.drawHits(host, bstore.search(BOOK.idx, q, 50), BOOK.entry, BOOK.m);
   }
 });
 
@@ -1078,6 +1163,13 @@ document.addEventListener('click', async (e) => {
   /* ---- parts books ---- */
   const bFor = e.target.closest('[data-bookfor]');
   if (bFor) { go('bookfor', bFor.dataset.bookfor); return; }
+  const bOpen = e.target.closest('[data-openbook]');
+  if (bOpen) { go('book', bOpen.dataset.openbook + '|' + (bOpen.dataset.for || '')); return; }
+  const bFile = e.target.closest('[data-bfile]');
+  if (bFile) {
+    go('bfile', bFile.dataset.book + '|' + bFile.dataset.bfile + '|' + ((BOOK && BOOK.mid) || ''));
+    return;
+  }
 
   const bPick = e.target.closest('[data-pick]');
   if (bPick) {

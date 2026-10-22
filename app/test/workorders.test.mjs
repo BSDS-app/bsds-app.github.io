@@ -49,7 +49,9 @@ const ok = (c, what, extra) => {
 };
 
 const browser = await chromium.launch({
-  executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  /* the build sandbox keeps its own Chromium; anywhere else, Playwright's */
+  ...(fs.existsSync('/opt/pw-browsers/chromium-1194/chrome-linux/chrome')
+    ? { executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' } : {}),
 });
 
 for (const size of [{ width: 390, height: 844 }, { width: 1200, height: 900 }]) {

@@ -24,6 +24,8 @@
  * A judgement pick that reaches an order sheet is still a judgement pick.
  */
 import * as auth from './auth.js';
+import * as store from './bookstore.js';
+import { icon } from './icons.js';
 
 const esc = s => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -36,8 +38,19 @@ export async function load() {
   if (DATA) return DATA;
   const res = await fetch('./books.data.json', { cache: 'no-cache' });
   if (!res.ok) throw new Error('The book index did not load.');
-  DATA = await res.json();
+  const d = await res.json();
+  await store.load();
+  DATA = d;
   return DATA;
+}
+
+/* The copy of this book that is in storage, if it has been put up. A book
+   can be the right one and still not be uploaded yet - those are different
+   facts and the screen says which. */
+export function storedFor(book) {
+  if (!book) return null;
+  if (book.store) return store.byId(book.store);
+  return store.forFolder(book.folder);
 }
 
 export function loaded() { return DATA; }
@@ -62,6 +75,18 @@ export function forMachine(machineId, picks) {
   if (rec.state === 'matched') {
     return { state: 'matched', how: 'serial', book: rec.book, machine: rec,
              decidedBy: rec.decidedBy || '' };
+  }
+  /* The Epiroc books converted earlier were never in the Sandvik libraries
+     the registry searched, so their machines read "no book". Where one of
+     them carries EXACTLY this machine's serial it is a serial match by the
+     same rule as any other - and only then, and only when it is the only
+     one. A held or ambiguous machine is left for a person. */
+  if (rec.state === 'nobook') {
+    const ep = store.bySerial(rec.serial);
+    if (ep.length === 1) {
+      return { state: 'matched', how: 'serial', machine: rec, decidedBy: '',
+               book: { lib: 'Epiroc', folder: ep[0].title, serial: ep[0].serial, store: ep[0].id } };
+    }
   }
   const pick = (picks || {})[machineId];
   if (pick) return { state: rec.state, how: 'judgement', book: pick, machine: rec, pick };
@@ -267,6 +292,16 @@ export function drawForMachine(host, view, ctx) {
       view.decidedBy ? cell('Decided by', view.decidedBy) : '',
       view.pick && view.pick.note ? cell('Why', view.pick.note) : '',
       '</div>');
+    const s = storedFor(view.book);
+    h.push(s
+      ? '<div class="tiles" style="margin-top:14px"><button class="tile blue" data-openbook="'
+        + esc(s.id) + '" data-for="' + esc(m.id || '') + '">' + icon('book')
+        + '<span class="tx"><b>Open the book</b><span>'
+        + (s.kind === 'pdf' ? esc(s.files) + ' PDFs' + (s.parts ? ' · part search' : '') : 'Converted book')
+        + '</span></span></button></div>'
+      : '<div class="note">This book is not in the app yet. Mike or Stew can put it up from '
+        + 'the workstation — <code>node tools/stage_books.mjs --add "' + esc(view.book.folder)
+        + '" --upload</code>.</div>');
   } else {
     h.push('<div class="note warn"><b>', esc(STATE[view.state] || 'No book'), '.</b> ',
       m.serial

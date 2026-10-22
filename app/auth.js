@@ -57,10 +57,10 @@ export function demoSignIn(uid) {
 /* ---------- live ------------------------------------------------------ */
 
 let fb = null;
+const V = '10.12.2';
 
 async function loadFirebase() {
   if (fb) return fb;
-  const V = '10.12.2';
   const [app, auth, store] = await Promise.all([
     import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`),
     import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`),
@@ -106,7 +106,14 @@ export async function sendReset(email) {
   await authMod.sendPasswordResetEmail(auth, email);
 }
 
+/* Books on this device go with the person. A phone handed to somebody else
+   should not still be carrying the last person's downloaded manuals. */
+async function forgetBooks() {
+  try { if (self.caches) await caches.delete('bsds-books'); } catch (e) { /* nothing cached */ }
+}
+
 export async function signOut() {
+  await forgetBooks();
   if (DEMO) {
     user = null;
     try { sessionStorage.removeItem('bsds.demoUser'); } catch (e) {}
@@ -196,4 +203,15 @@ export async function db() {
    signs its tokens for a different project. */
 export async function firebase() {
   return loadFirebase();
+}
+
+/* Cloud Storage, loaded only when somebody opens a book - most visits never
+   need it. Same app instance, so requests carry the signed-in user. */
+export async function storage() {
+  const f = await loadFirebase();
+  if (!f.stMod) {
+    f.stMod = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-storage.js`);
+    f.st = f.stMod.getStorage(f.app);
+  }
+  return { st: f.st, m: f.stMod };
 }

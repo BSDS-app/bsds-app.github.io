@@ -61,12 +61,21 @@ const ok = (c, what, extra) => {
 };
 
 const browser = await chromium.launch({
-  executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
+  /* the build sandbox keeps its own Chromium; anywhere else, Playwright's */
+  ...(fs.existsSync('/opt/pw-browsers/chromium-1194/chrome-linux/chrome')
+    ? { executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' } : {}),
 });
 
 for (const size of [{ width: 390, height: 800 }, { width: 1200, height: 900 }]) {
   const tag = `${size.width}px`;
+  /* Newer headless Chromium (the Windows one) reports notifications as
+     blocked whatever it is granted, which shows the "your phone is blocking
+     them" note in place of the switch. The test is about a phone that has
+     never been asked, so it says so. */
   const ctx = await browser.newContext({ viewport: size, deviceScaleFactor: 2 });
+  await ctx.addInitScript(() => {
+    try { Object.defineProperty(Notification, 'permission', { get: () => 'default' }); } catch (e) {}
+  });
   const page = await ctx.newPage();
   const errs = [], notFound = [];
   page.on('pageerror', e => errs.push(String(e)));
@@ -393,7 +402,8 @@ for (const size of [{ width: 390, height: 800 }, { width: 1200, height: 900 }]) 
   ok(/stays on your home screen/i.test(nt),
     `${tag} and says plainly that everything else just sits there`);
   ok(await page.locator('#pon, #poff').count() === 1,
-    `${tag} and there is exactly one switch`);
+    `${tag} and there is exactly one switch`,
+    ((nt.split('waits for you')[1]) || nt).replace(/\s+/g, ' ').slice(0, 140));
   ok(!/service order|defect/i.test(nt.split('Everything else')[0] || ''),
     `${tag} and nothing else is promised as a notification`);
 

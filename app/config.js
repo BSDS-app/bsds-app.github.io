@@ -204,8 +204,11 @@ export const CONFIG = {
     preop:    'https://script.google.com/macros/s/AKfycbymsh02dEQ6jegenaG9sxXR84QhcZOT6uTD3xbq5ZEBZAOIDwfSeWQ5pzSFAtoXdsa4lA/exec',
   },
 
-  /* Parts books already built. Each one is its own published page for now;
-   * they move into the app's own storage in a later slice. */
+  /* Parts books converted by hand earlier, as pages of their own. Once
+   * tools/stage_books.mjs has put one in storage (it reads the id, title and
+   * serial from here), the app opens the stored copy and this url is only
+   * the fallback for a book not uploaded yet. Keep the id/title/serial on one
+   * line each - the stage script reads them with a pattern. */
   books: [
     { id: '70165', title: 'DM45-HP 70165',   serial: '70165', url: 'https://claude.ai/artifact/A1tDKMMPCXuqAUPhsgEKKq' },
     { id: '8619',  title: 'DM45 8619',       serial: '8619',  url: 'https://claude.ai/artifact/YDyGtjG6htgyDQWME5X9bi' },

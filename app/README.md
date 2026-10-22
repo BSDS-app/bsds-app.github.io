@@ -55,6 +55,10 @@ button is not security — anybody can open the browser console.
 | `alerts.js` | the band on the home screen: what is waiting on whoever just opened it |
 | `push.js`, `sw.js` | the half that reaches a phone when nobody has opened the app |
 | `receipts.js` | receipts: the photo path unchanged, the coding and the office worklist new |
+| `books.js`, `books.data.json` | which book a machine gets — by serial, or by a judgement somebody owns |
+| `bookstore.js`, `books.stored.json` | the books that are in Cloud Storage, and opening them |
+| `tools/stage_books.mjs` | puts books into Storage, from the workstation with the D: drive |
+| `storage.cors.json` | lets the Pages site fetch from the bucket |
 | `functions/index.js` | the sender. Two pushes, and the reason there are only two |
 | `icons.js` | the line icons on the tiles |
 | `manifest.json` | what Add to Home Screen uses: the name, the logo, the navy |
@@ -362,6 +366,92 @@ enforced in `firestore.rules`, not just on the screen.
 
 ---
 
+## Parts books in storage
+
+**What is up there.** Every machine matched by serial — 14 Toolman books —
+plus the 7 Epiroc books that were converted by hand earlier. About 4.9 GB,
+just inside the 5 GB Storage gives away free. Not the whole 255 GB of Toolman
+libraries: 647 books nobody has asked for is a bill and a week of uploading.
+
+**Opening one.** A machine's page has **Open the book**. The Parts books
+screen lists everything that is in the app. A Toolman book opens on its
+contents — spare parts first, then workshop, maintenance, operator, engine —
+and, for 12 of the 14, a **part search** (the DX800 S5 68792 and DI650
+82517 CDs carry no part index): type a number or words off the
+drawing and it says which chapter (and on the older CDs, which page) to open.
+A chapter is fetched once and then kept on that phone, so the second open on
+the deck does not need signal. Signing out clears what was kept.
+
+The Epiroc books open inside the app as well, in a **sealed frame**: their
+own scripts run, but they cannot touch the app's sign-in or database. The
+order tray in them still works, it just does not survive closing the book.
+
+**The serial rule did not move.** Four Epiroc books — DM45 70165, 8619, 9453
+and DR607 (s/n 7165) — carry exactly the serial of a fleet machine that the
+registry had down as "no book", because the registry only searched the
+Sandvik libraries. Those now count as matched, by the same exact-serial rule
+as everything else. The D65 book has no serial, so no D65 matches it; a D65
+gets it by judgement, banner and all. A held or ambiguous machine is never
+matched this way.
+
+**A judgement pick keeps its red banner everywhere** — on the machine, on the
+book, and on the chapter PDF it leads to. Opened from the library rather than
+for a machine, the same book has none, because then it is not standing in for
+anybody's.
+
+**Nothing is ever a shareable link.** The app reads through the Storage SDK,
+which sends the person's sign-in every time, and never asks for a download
+URL — those carry their own token and work for whoever they are pasted to.
+`test/books.test.mjs` fails if one ever appears on the page.
+
+### Putting them up — once
+
+These need your Google login, so they are yours. Node and the Google Cloud
+CLI installed first.
+
+1. **Blaze plan**, Firebase console → Upgrade. Storage needs it. Set the
+   budget alert the same day (see *Budget alert*).
+2. **Storage → Get started**, production mode, location **US-WEST1** (the
+   nearest region with the free 5 GB).
+3. From this folder:
+
+```
+firebase login
+gcloud auth login
+gcloud config set project bsds-app
+npm run books:upload
+gcloud storage buckets update gs://bsds-app.firebasestorage.app --cors-file=storage.cors.json
+firebase deploy --only storage
+```
+
+`books:upload` is resumable: if it stops, run it again and it carries on.
+Then push the app with the new `books.stored.json` in it — that file is how
+the app knows what is up there.
+
+The staging copy lives in `Downloads\bsds-books\staging`, **outside** this
+folder on purpose: this folder becomes a public website, and a book copied
+into it is a book published to the world.
+
+### Adding a book later
+
+When somebody picks a book by judgement that is not up yet, the machine page
+says so and gives the command:
+
+```
+node tools/stage_books.mjs --add "Leopard DI550 S5 60673" --upload
+```
+
+Then push `books.stored.json`. Earlier `--add`s are kept on later runs.
+
+### Cutting somebody off
+
+`active: false` stops them using the app but not a direct Storage fetch —
+the bucket rule checks sign-in, not role, so that opening one book is not a
+database read per drawing. **Disable the account in Firebase Authentication**
+as well; that stops both within the hour.
+
+---
+
 ## Parts
 
 Three states and nothing clever: **open** (a tech has asked, nobody has
@@ -542,6 +632,8 @@ node test/alerts.test.mjs     # the home band, including that a quiet shop shows
 node test/workorders.test.mjs # a tech rings one in, the office builds it, the number comes back
 node test/push.test.mjs       # the two notifications, and the files that have to agree about them
 node test/receipts.test.mjs   # the coding, and the split that has to add up
+node test/books.test.mjs      # the serial rule, stored books, and the banner that follows a judgement
+node test/stage.test.mjs      # what the upload script sends - and the programs it refuses to
 node test/rules.static.mjs    # roles.js and firestore.rules still agree
 ```
 
@@ -558,7 +650,9 @@ missing attendant, the unconfirmed rescue equipment. A JSA that lets a man
 sign off on an entry he has not planned is worse than no JSA, so that refusal
 is tested rather than trusted.
 
-Both of those run anywhere. The third one needs a download this build
+Both of those run anywhere — the browser tests use the build sandbox's own
+Chromium when it is there and Playwright's (`npx playwright install
+chromium`) anywhere else. The third one needs a download this build
 environment is not allowed to make, so **run it once on your machine before
 you put real data in**:
 
@@ -588,5 +682,5 @@ nothing is stranded mid-changeover. They write to their own spreadsheets; the
 new ones write to Firestore. Nothing reconciles the two, so pick one per
 machine per shift rather than filing the same paperwork twice.
 
-The parts books still open as separate pages; they move into Storage next — the 70165 book already serves its 294 drawings as separate files, which
-is the shape they need to be in.
+The parts books are in Storage — see *Parts books in storage*. The rest of
+the Toolman library goes up a book at a time, as somebody needs one.

@@ -1,0 +1,59 @@
+rules_version = '2';
+
+/* Cloud Storage holds the parts books: one folder per BOOK (not per machine -
+ * a book belongs to a serial, and a judgement pick can point two machines at
+ * one book). Each folder has a manifest.json, the book's files, and for
+ * Toolman books an index.json of part numbers. Everything here is read-only
+ * to the app - books are built and uploaded from a workstation by
+ * tools/stage_books.mjs, never written from a phone.
+ *
+ * The app reads with the SDK (getBlob/getBytes), which sends the user's
+ * sign-in with every request, so these rules are what decide. It never asks
+ * for a download URL: a download URL carries its own token and works for
+ * anyone it is pasted to, signed in or not, which would make this file
+ * decoration.
+ *
+ * Why this checks only "signed in" and not the user's role:
+ * a Storage rule that reads the users collection costs a Firestore read on
+ * EVERY object fetched, and opening one assembly pulls several drawings. That
+ * turns a parts lookup into a bill. Books are not sensitive between staff -
+ * every role may read them - so the auth check is the right boundary here.
+ *
+ * To cut someone off, DISABLE THE ACCOUNT in Firebase Authentication. Setting
+ * active:false in Firestore stops them using the app but does not stop a
+ * direct Storage fetch; a disabled account stops both within the hour.
+ *
+ * Receipt images, master logs and JSA data are NOT in this bucket and must
+ * never be added under a rule like this one - they are owner/office only and
+ * need their own match block with a real role check.
+ */
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Parts books: manifest, part index and the book's own files, per book.
+    match /books/{book}/{allPaths=**} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    // Schematics and manuals, when they land, follow the same shape.
+    match /schematics/{machine}/{allPaths=**} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+    match /manuals/{machine}/{allPaths=**} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    // Anything not named above is denied outright, reads included. A new kind
+    // of file has to be given its own rule deliberately.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

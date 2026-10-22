@@ -1,0 +1,236 @@
+{
+ "builtAt": "2026-10-22",
+ "books": [
+  {
+   "id": "epiroc-70165",
+   "kind": "html",
+   "title": "DM45-HP 70165",
+   "lib": "Epiroc",
+   "folder": "70165",
+   "ref": "70165",
+   "serial": "70165",
+   "files": 1,
+   "mb": 29.3
+  },
+  {
+   "id": "epiroc-8619",
+   "kind": "html",
+   "title": "DM45 8619",
+   "lib": "Epiroc",
+   "folder": "8619",
+   "ref": "8619",
+   "serial": "8619",
+   "files": 1,
+   "mb": 4.6
+  },
+  {
+   "id": "epiroc-9453",
+   "kind": "html",
+   "title": "DM45 9453",
+   "lib": "Epiroc",
+   "folder": "9453",
+   "ref": "9453",
+   "serial": "9453",
+   "files": 1,
+   "mb": 4.1
+  },
+  {
+   "id": "epiroc-d65",
+   "kind": "html",
+   "title": "D65",
+   "lib": "Epiroc",
+   "folder": "d65",
+   "ref": "d65",
+   "serial": "",
+   "files": 1,
+   "mb": 11.1
+  },
+  {
+   "id": "epiroc-dr607",
+   "kind": "html",
+   "title": "DR607 (s/n 7165)",
+   "lib": "Epiroc",
+   "folder": "dr607",
+   "ref": "dr607",
+   "serial": "7165",
+   "files": 1,
+   "mb": 2.6
+  },
+  {
+   "id": "epiroc-dr617",
+   "kind": "html",
+   "title": "DR617 (s/n 47047)",
+   "lib": "Epiroc",
+   "folder": "dr617",
+   "ref": "dr617",
+   "serial": "47047",
+   "files": 1,
+   "mb": 6.9
+  },
+  {
+   "id": "epiroc-dr623",
+   "kind": "html",
+   "title": "DR623 (s/n 58348)",
+   "lib": "Epiroc",
+   "folder": "dr623",
+   "ref": "dr623",
+   "serial": "58348",
+   "files": 1,
+   "mb": 9.8
+  },
+  {
+   "id": "tm-dx800-110t15405-1",
+   "kind": "pdf",
+   "title": "DX800 110T15405-1",
+   "lib": "Ranger",
+   "folder": "DX800 110T15405-1",
+   "serial": "110T15405-1",
+   "files": 51,
+   "mb": 218,
+   "parts": 5097
+  },
+  {
+   "id": "tm-leopard-di550-t4-34965",
+   "kind": "pdf",
+   "title": "Leopard DI550 T4 34965",
+   "lib": "Leopard",
+   "folder": "Leopard DI550 T4 34965",
+   "serial": "34965",
+   "files": 55,
+   "mb": 373,
+   "parts": 5424
+  },
+  {
+   "id": "tm-leopard-di550-t4-49998",
+   "kind": "pdf",
+   "title": "Leopard DI550 T4 49998",
+   "lib": "Leopard",
+   "folder": "Leopard DI550 T4 49998",
+   "serial": "49998",
+   "files": 54,
+   "mb": 393,
+   "parts": 5389
+  },
+  {
+   "id": "tm-leopard-di550-t4-54459",
+   "kind": "pdf",
+   "title": "Leopard DI550 T4 54459",
+   "lib": "Leopard",
+   "folder": "Leopard DI550 T4 54459",
+   "serial": "54459",
+   "files": 54,
+   "mb": 378,
+   "parts": 5364
+  },
+  {
+   "id": "tm-leopard-di550-t4-54471",
+   "kind": "pdf",
+   "title": "Leopard DI550 T4 54471",
+   "lib": "Leopard",
+   "folder": "Leopard DI550 T4 54471",
+   "serial": "54471",
+   "files": 54,
+   "mb": 396,
+   "parts": 5321
+  },
+  {
+   "id": "tm-leopard-di550-t4-58348",
+   "kind": "pdf",
+   "title": "Leopard DI550 T4 58348",
+   "lib": "Leopard",
+   "folder": "Leopard DI550 T4 58348",
+   "serial": "58348",
+   "files": 54,
+   "mb": 399,
+   "parts": 5435
+  },
+  {
+   "id": "tm-leopard-di650-82517",
+   "kind": "pdf",
+   "title": "Leopard DI650 82517",
+   "lib": "Leopard",
+   "folder": "Leopard DI650 82517",
+   "serial": "82517",
+   "files": 29,
+   "mb": 472,
+   "parts": 0
+  },
+  {
+   "id": "tm-pantera-dp1500i-s5-56407",
+   "kind": "pdf",
+   "title": "Pantera DP1500i S5 56407",
+   "lib": "Pantera",
+   "folder": "Pantera DP1500i S5 56407",
+   "serial": "56407",
+   "files": 58,
+   "mb": 393,
+   "parts": 5357
+  },
+  {
+   "id": "tm-pantera-dp1500i-t4-39376",
+   "kind": "pdf",
+   "title": "Pantera DP1500i T4 39376",
+   "lib": "Pantera",
+   "folder": "Pantera DP1500i T4 39376",
+   "serial": "39376",
+   "files": 55,
+   "mb": 374,
+   "parts": 5306
+  },
+  {
+   "id": "tm-ranger-dx600-t4-43355",
+   "kind": "pdf",
+   "title": "Ranger DX600 T4 43355",
+   "lib": "Ranger",
+   "folder": "Ranger DX600 T4 43355",
+   "serial": "43355",
+   "files": 56,
+   "mb": 333,
+   "parts": 5281
+  },
+  {
+   "id": "tm-ranger-dx800-26236",
+   "kind": "pdf",
+   "title": "Ranger DX800 26236",
+   "lib": "Ranger",
+   "folder": "Ranger DX800 26236",
+   "serial": "26236",
+   "files": 52,
+   "mb": 302,
+   "parts": 5476
+  },
+  {
+   "id": "tm-ranger-dx800-s5-68792",
+   "kind": "pdf",
+   "title": "Ranger DX800 S5 68792",
+   "lib": "Ranger",
+   "folder": "Ranger DX800 S5 68792",
+   "serial": "68792",
+   "files": 26,
+   "mb": 211,
+   "parts": 0
+  },
+  {
+   "id": "tm-ranger-dx800-t4-44834",
+   "kind": "pdf",
+   "title": "Ranger DX800 T4 44834",
+   "lib": "Ranger",
+   "folder": "Ranger DX800 T4 44834",
+   "serial": "44834",
+   "files": 59,
+   "mb": 338,
+   "parts": 5357
+  },
+  {
+   "id": "tm-ranger-dx800-t4-47047",
+   "kind": "pdf",
+   "title": "Ranger DX800 T4 47047",
+   "lib": "Ranger",
+   "folder": "Ranger DX800 T4 47047",
+   "serial": "47047",
+   "files": 59,
+   "mb": 345,
+   "parts": 5402
+  }
+ ]
+}

@@ -110,7 +110,12 @@ the repo, so they are versioned and a later change is a diff rather than a
 mystery.
 
 **2. Deploy the app.** Copy this folder into the `bsds-app.github.io` repo as
-`app/`, commit, push. Pages serves it at `bsds-app.github.io/app/` within a
+`app/`, commit, push. On the workstation the repo is already cloned at
+`Downloads\bsds-app.github.io` (Git signed in through Git Credential
+Manager), so an update is: copy the changed files into its `app\`, then
+`git add`, `git commit`, `git push`. Dragging files into GitHub's upload page
+works too — but check the page says **bsds-app.github.io / app /** first;
+once they landed at the top level by mistake. Pages serves it at `bsds-app.github.io/app/` within a
 minute. The Launcher is not touched.
 
 **3. Make yourself an owner.** Done. This is the only account that ever has

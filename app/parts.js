@@ -314,8 +314,25 @@ export function drawForm(host, ctx) {
     '<b>On order</b>, and to <b>Received</b> when it turns up — you do not have to ',
     'chase anybody to find out.</div></div>');
   host.innerHTML = h.join('');
-  addLine(host);
-  addLine(host);
+  /* Lines picked out of a parts book arrive filled in; the person still
+     checks them and sends - picking is not ordering. */
+  const pre = ctx.prefill && ctx.prefill.lines && ctx.prefill.lines.length ? ctx.prefill : null;
+  if (pre) {
+    pre.lines.forEach(l => {
+      addLine(host);
+      const row = host.querySelector('#partlines').lastElementChild;
+      row.querySelector('[data-col="pn"]').value = l.pn || '';
+      row.querySelector('[data-col="qty"]').value = l.qty || 1;
+      row.querySelector('[data-col="desc"]').value = l.desc || '';
+    });
+    if (pre.unit) host.querySelector('#p_unit').value = pre.unit;
+    host.querySelector('.lede').insertAdjacentHTML('afterend', '<div class="note"><b>From the parts book.</b> '
+      + pre.lines.length + ' part' + (pre.lines.length === 1 ? '' : 's') + ' filled in below. '
+      + 'Check the machine and the quantities, then send.</div>');
+  } else {
+    addLine(host);
+    addLine(host);
+  }
   const who = host.querySelector('[data-p="byName"]');
   if (who) who.value = u.name;
 }

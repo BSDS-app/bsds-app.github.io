@@ -219,15 +219,18 @@ export const CONFIG = {
     { id: 'd65',   title: 'D65',             serial: '',      url: 'https://claude.ai/artifact/Vqvf2VGQxpasjQyPvjShDF' },
   ],
 
-  /* Reference shelves that are not per-machine. */
+  /* Reference shelves that are not per-machine. Like the books above: once
+   * tools/stage_books.mjs has put one in storage (from the folder of the same
+   * id under bsds-books\shelves), the app opens the stored copy and the url is
+   * only the fallback. Keep id and title on one line - the script reads them. */
   shelves: [
-    { title: 'D65 Schematics',        url: 'https://claude.ai/artifact/7tC9bCjwSvTYAyMoW7g2Xe' },
-    { title: 'Epiroc Schematic Map',  url: 'https://claude.ai/artifact/4i8VSK5KQjNXshbm5yZP2V' },
-    { title: 'Which Manual Does This Drill Take', url: 'https://claude.ai/artifact/LmRPUhJRWTtAsx4BksVtoj' },
-    { title: 'DM45 / DM50 / DML Manual', url: 'https://claude.ai/artifact/84U4maMN3h9GC61rqf8NqU' },
-    { title: 'DI550 Operations',      url: 'https://claude.ai/artifact/7RTRHgLv3eQQ8FB5ARCpbe' },
-    { title: 'DI550 Maintenance',     url: 'https://claude.ai/artifact/GfGksfbPKMJA71k6Ms8Qnv' },
-    { title: 'DI550 Technical',       url: 'https://claude.ai/artifact/YGmy3Sfdwf26b63xPKio86' },
+    { id: 'd65-schematics', title: 'D65 Schematics',        url: 'https://claude.ai/artifact/7tC9bCjwSvTYAyMoW7g2Xe' },
+    { id: 'epiroc-schematic-map', title: 'Epiroc Schematic Map', url: 'https://claude.ai/artifact/4i8VSK5KQjNXshbm5yZP2V' },
+    { id: 'which-manual', title: 'Which Manual Does This Drill Take', url: 'https://claude.ai/artifact/LmRPUhJRWTtAsx4BksVtoj' },
+    { id: 'dm45-manual', title: 'DM45 / DM50 / DML Manual', url: 'https://claude.ai/artifact/84U4maMN3h9GC61rqf8NqU' },
+    { id: 'di550-operations', title: 'DI550 Operations',     url: 'https://claude.ai/artifact/7RTRHgLv3eQQ8FB5ARCpbe' },
+    { id: 'di550-maintenance', title: 'DI550 Maintenance',   url: 'https://claude.ai/artifact/GfGksfbPKMJA71k6Ms8Qnv' },
+    { id: 'di550-technical', title: 'DI550 Technical',       url: 'https://claude.ai/artifact/YGmy3Sfdwf26b63xPKio86' },
     { title: 'Parts book library (Drive)',
       url: 'https://drive.google.com/drive/folders/1cgYEjScsFTapNGj84vv8UPjT_7G42CAh' },
   ],

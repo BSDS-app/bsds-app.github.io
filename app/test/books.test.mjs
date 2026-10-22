@@ -59,9 +59,17 @@ const DEMO_BOOKS = {
                                      'TOWING EYE parts 00302748 Pin 1']),
   'books/epiroc-d65/manifest.json': JSON.stringify({ v: 1, kind: 'html', id: 'epiroc-d65',
     title: 'D65', lib: 'Epiroc', serial: '', file: 'book.html' }),
-  'books/epiroc-d65/book.html': '<p id="inside">D65 book</p><script>'
+  'books/shelf-which-manual/manifest.json': JSON.stringify({ v: 1, kind: 'html', id: 'shelf-which-manual',
+    title: 'Which Manual Does This Drill Take', lib: 'Reference', serial: '', shelf: true, file: 'book.html' }),
+  'books/shelf-which-manual/book.html': '<p id="inside">Which manual</p>',
+  /* shaped like the converted books: a tray, the book's own orderRows() and
+     COLS, and nothing that knows about the app */
+  'books/epiroc-d65/book.html': '<html><head><title>x</title></head><body><p id="inside">D65 book</p><script>'
     + 'document.title = (function(){try{return String(window.parent.document.cookie)}catch(e){return "SEALED"}})();'
-    + '</script>',
+    + 'let tray=[{i:0,q:"2"}];'
+    + 'const COLS=["Part number","Qty","Ref","Description","Size / designation","Unit"];'
+    + 'function orderRows(){return tray.map(t=>["5112 3345 00",t.q,"4","HOSE","","D-43"]);}'
+    + '</script></body></html>',
 };
 
 const server = http.createServer((req, res) => {
@@ -293,6 +301,8 @@ await page.waitForFunction(() => /Page 3 of 3/.test((document.getElementById('pv
   null, { timeout: 20000 }).catch(() => {});
 ok(/Page 3 of 3/.test(await pos()),
   'THE POINT: a searched part opens on the page it is printed on, not the contents', await pos());
+await page.waitForFunction(() => / is on page /.test((document.getElementById('pvmsg') || {}).textContent || ''),
+  null, { timeout: 10000 }).catch(() => {});
 const found = (await page.textContent('#pvmsg').catch(() => '')) || '';
 ok(/00302748/.test(found) && /page 3/i.test(found) && /tap ‹/.test(found),
   'and says which page, and where to look for the drawing', found.slice(0, 140));
@@ -306,6 +316,27 @@ await page.waitForTimeout(500);
 ok(/Page 2 of 3/.test(await pos()), 'one tap back is the drawing', await pos());
 const openHref = await page.getAttribute('#bopen', 'href');
 ok(/^blob:/.test(openHref || ''), 'Open and Save are still there as a way out', openHref);
+
+/* ---- from the page to a parts request ---------------------------------- */
+await page.evaluate(() => sessionStorage.removeItem('bsds.partsBasket'));
+await page.click('#pvadd');
+await page.click('#pvadd');
+ok(/2 of them/.test(await page.textContent('#pvadd')), 'a second tap adds one more, not a second line',
+  await page.textContent('#pvadd'));
+ok(!!(await page.$('.basketbar')), 'and the parts waiting to order are shown');
+await page.click('.basketbar');
+await page.waitForTimeout(500);
+const form = await page.evaluate(() => ({
+  unit: (document.getElementById('p_unit') || {}).value,
+  rows: [...document.querySelectorAll('#partlines .partrow')].map(r =>
+    ['pn', 'qty', 'desc'].map(c => r.querySelector('[data-col="' + c + '"]').value)),
+}));
+ok(form.rows.length === 1 && form.rows[0][0] === '00302748' && form.rows[0][1] === '2',
+  'THE POINT: the part lands on a parts request, number and quantity filled in', JSON.stringify(form.rows));
+ok(form.rows[0][2] === 'Pin', 'with what it is, from the book’s index', form.rows[0][2]);
+ok(form.unit === 'DR617', 'for the machine the book was opened from', form.unit);
+await tap({ 'data-bookfor': '3-rivers-drilling-blasting--DR617' });
+await tap({ 'data-openbook': 'tm-ranger-dx800-t4-47047', 'data-for': '3-rivers-drilling-blasting--DR617' });
 /* a chapter opened from the contents list, with no part, starts at the start */
 await tap({ 'data-bfile': 'sp/16.pdf', 'data-book': 'tm-ranger-dx800-t4-47047' });
 await page.waitForFunction(() => /Page 1 of 3/.test((document.getElementById('pvpos') || {}).textContent || ''),
@@ -345,6 +376,23 @@ ok(sb !== null && !/allow-same-origin/.test(sb), 'the converted book runs in a s
 const fr = page.frames().find(f => f !== page.mainFrame());
 const sealed = fr ? await fr.evaluate(() => document.title) : '';
 ok(sealed === 'SEALED', 'and its scripts cannot reach the app around it', sealed);
+const hasSave = fr ? await fr.evaluate(() => typeof (window.claude && window.claude.use)) : '';
+ok(hasSave === 'function', 'the book’s own save has somewhere to go again', hasSave);
+
+/* its tray goes onto a parts request */
+await page.evaluate(() => sessionStorage.removeItem('bsds.partsBasket'));
+await page.click('#pgsend');
+await page.waitForTimeout(800);
+const epForm = await page.evaluate(() => ({
+  unit: (document.getElementById('p_unit') || {}).value,
+  rows: [...document.querySelectorAll('#partlines .partrow')].map(r =>
+    ['pn', 'qty', 'desc'].map(c => r.querySelector('[data-col="' + c + '"]').value)),
+}));
+ok(epForm.rows.length === 1 && epForm.rows[0][0] === '5112 3345 00' && epForm.rows[0][1] === '2'
+  && epForm.rows[0][2] === 'HOSE',
+  'THE POINT: a converted book’s list lands on a parts request', JSON.stringify(epForm.rows));
+ok(epForm.unit === 'D-43', 'with the unit typed into the book', epForm.unit);
+await page.evaluate(() => sessionStorage.removeItem('bsds.partsBasket'));
 
 /* the library screen lists what is in the app instead of linking out */
 await tap({ 'data-go': 'books' });
@@ -354,6 +402,21 @@ await page.waitForTimeout(400);
 const libLinks = await page.$$eval('a.tile.blue[href*="claude.ai/artifact"]', a => a.map(x => x.href));
 ok(libLinks.length === 0, 'a book that is in storage no longer sends anyone to claude.ai', libLinks.join(' '));
 ok((await page.$$('[data-openbook]')).length === stored.length, 'every stored book is on the library screen');
+const shelfLinks = await page.$$eval('a.tile.teal[href*="claude.ai/artifact"]', a => a.map(x => x.href));
+ok(shelfLinks.length === 0, 'and no schematic or manual sends anyone to claude.ai any more', shelfLinks.join(' '));
+ok((await page.$$('a.tile.teal[href*="drive.google.com"]')).length === 1,
+  'the Drive folder, which is not a page, still links out');
+
+/* a manual opens in the app, without a parts-request button it has no use for */
+await tap({ 'data-openbook': 'shelf-which-manual' });
+await page.waitForTimeout(500);
+ok(!!(await page.$('.frame iframe')), 'a manual opens inside the app');
+ok(!(await page.$('#pgsend')), 'with no "send to a parts request" - a manual has no tray');
+const shelfMatch = await page.evaluate(async () => {
+  const s = await import('./bookstore.js');
+  return s.bySerial('').length + s.list().filter(b => b.shelf && b.serial).length;
+});
+ok(shelfMatch === 0, 'no manual carries a serial a machine could match');
 
 const real = errs.filter(e => !/ERR_TUNNEL|fonts\.googleapis|favicon/.test(e));
 ok(real.length === 0, 'no script errors', real.slice(0, 2).join(' | '));

@@ -459,7 +459,7 @@ async function books() {
   chrome('Parts books', 'Library');
   $('view').innerHTML = loading;
   try { await book.load(); } catch (e) { /* the library still lists what it can */ }
-  const inApp = bstore.list();
+  const inApp = bstore.list().filter(s => !s.shelf);
   const h = ['<div class="wrap"><h1 class="pg">Parts books</h1>',
     '<p class="lede">', inApp.length
       ? 'These open inside the app, for anyone signed in. A machine’s own book is also on its page.'
@@ -477,9 +477,16 @@ async function books() {
     + '</span><span class="sub">Matched by serial, chosen by judgement, or nothing yet'
     + '</span></span><span class="ct">\u203a</span></button></div>',
     '<h2 class="sec">Schematics and manuals</h2><div class="tiles">');
-  CONFIG.shelves.forEach(s => h.push('<a class="tile teal" href="', esc(s.url),
-    '" target="_blank" rel="noopener">',
-    tileFace(s.title, 'Reference', 'book'), '</a>'));
+  /* in storage, behind the sign-in; anything not put up yet (the Drive
+     folder, a page not staged) still opens where it always has */
+  CONFIG.shelves.forEach(s => {
+    const st = s.id ? bstore.forShelf(s.id) : null;
+    h.push(st
+      ? '<button class="tile teal" data-openbook="' + esc(st.id) + '">'
+        + tileFace(s.title, 'Reference · in the app', 'book') + '</button>'
+      : '<a class="tile teal" href="' + esc(s.url) + '" target="_blank" rel="noopener">'
+        + tileFace(s.title, 'Reference', 'book') + '</a>');
+  });
   h.push('</div></div>');
   $('view').innerHTML = h.join('');
 }
@@ -499,6 +506,20 @@ async function judgementBanner(mid) {
   } catch (e) { return ''; }
 }
 
+/* Which machine a parts request from this book is for: the one it was opened
+   from, or else the one fleet machine carrying the book's serial. Anything
+   less certain is left blank for the person to fill in. */
+function unitFor(entry, mid) {
+  if (mid) {
+    const v = book.forMachine(mid, bookPicks);
+    if (v.machine && v.machine.unit) return v.machine.unit;
+  }
+  const k = bstore.key(entry && entry.serial);
+  if (!k) return '';
+  const hits = (DATA.equipment || []).filter(e => !e.retired && bstore.key(e.serial) === k);
+  return hits.length === 1 ? hits[0].unit : '';
+}
+
 async function bookView(arg) {
   const [id, mid] = String(arg || '').split('|');
   chrome('Parts book', '');
@@ -516,7 +537,8 @@ async function bookView(arg) {
       const html = await bstore.page(entry, m);
       if (route.view !== 'book' || route.arg !== arg) return;   /* they left */
       document.body.classList.add('framed');
-      bstore.drawPage($('view'), html, m.title, { banner });
+      BOOK = { entry, m, idx: null, mid };
+      bstore.drawPage($('view'), html, m.title, { banner, noTray: !!entry.shelf });
       sitFrameUnderBar();
       return;
     }
@@ -539,8 +561,11 @@ async function bookFile(arg) {
     if (fileUrl) URL.revokeObjectURL(fileUrl);
     fileUrl = URL.createObjectURL(b);
     const name = entry.title + ' - ' + rel.replace(/\//g, ' ');
+    const row = part && BOOK && BOOK.idx && BOOK.idx.rows
+      ? BOOK.idx.rows.find(r => bstore.key(r[0]) === bstore.key(part)) : null;
     await bstore.openPdf($('view'), b, fileUrl,
-      { name, part, banner: await judgementBanner(mid) });
+      { name, part, desc: row ? row[1] : '', unit: unitFor(entry, mid),
+        banner: await judgementBanner(mid) });
   } catch (e) { $('view').innerHTML = oops(e, 'fetch it'); }
 }
 
@@ -876,7 +901,7 @@ const oops = (e, what) => '<div class="wrap"><div class="note warn"><b>Could not
 
 function partsForm() {
   chrome('Order parts', 'New request');
-  parts.drawForm($('view'), { equipment: DATA.equipment });
+  parts.drawForm($('view'), { equipment: DATA.equipment, prefill: bstore.basket() });
 }
 
 async function partsMine() {
@@ -1164,6 +1189,26 @@ document.addEventListener('click', async (e) => {
   /* ---- parts books ---- */
   const bFor = e.target.closest('[data-bookfor]');
   if (bFor) { go('bookfor', bFor.dataset.bookfor); return; }
+  if (e.target.id === 'pgsend' && BOOK) {
+    const btn = e.target;
+    btn.disabled = true;
+    try {
+      const t = await bstore.askTray();
+      const { lines, unit } = bstore.trayLines(t.cols, t.rows);
+      if (!lines.length) {
+        btn.textContent = 'Nothing on this book’s list yet — tap + beside a part first';
+        btn.disabled = false;
+        return;
+      }
+      bstore.basketAdd(lines, unit || unitFor(BOOK.entry, BOOK.mid));
+      go('parts');
+    } catch (err) {
+      /* the book fills the screen, so say it on the button, where it is seen */
+      btn.disabled = false;
+      btn.textContent = 'That did not work: ' + ((err && err.message) || 'unknown error') + ' Try again.';
+    }
+    return;
+  }
   const bOpen = e.target.closest('[data-openbook]');
   if (bOpen) { go('book', bOpen.dataset.openbook + '|' + (bOpen.dataset.for || '')); return; }
   const bFile = e.target.closest('[data-bfile]');
@@ -1409,6 +1454,7 @@ document.addEventListener('click', async (e) => {
     msg.textContent = 'Sending…';
     try {
       const id = await parts.save(out.rec);
+      bstore.basketClear();          /* it is a request now, not a list */
       go('preq', id, true);
     } catch (err) {
       e.target.disabled = false;

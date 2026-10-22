@@ -50,7 +50,11 @@ export function forFolder(folder) {
 }
 /* The stored copy of an Epiroc book listed in config.js. */
 export function forRef(ref) {
-  return list().find(b => b.kind === 'html' && b.ref === ref) || null;
+  return list().find(b => b.kind === 'html' && !b.shelf && b.ref === ref) || null;
+}
+/* The stored copy of a schematics or manuals page from config.shelves. */
+export function forShelf(ref) {
+  return list().find(b => b.shelf && b.ref === ref) || null;
 }
 /* Converted books whose serial is EXACTLY this one. Returns all of them so
    the caller can refuse when there is more than one - two books on a serial
@@ -58,7 +62,7 @@ export function forRef(ref) {
 export function bySerial(serial) {
   const k = key(serial);
   if (!k) return [];
-  return list().filter(b => b.kind === 'html' && key(b.serial) === k);
+  return list().filter(b => b.kind === 'html' && !b.shelf && key(b.serial) === k);
 }
 
 /* ---------- fetching ---------------------------------------------------- */
@@ -154,7 +158,7 @@ const mb = b => (b / 1048576 < 1 ? '<1' : Math.round(b / 1048576)) + ' MB';
    decided here, so a judgement pick is marked the same way on every screen. */
 export function drawBook(host, entry, m, ctx) {
   const o = ctx || {};
-  const h = ['<div class="wrap">', o.banner || ''];
+  const h = ['<div class="wrap">', o.banner || '', basketBar()];
   h.push('<div class="sheet"><div class="head"><div><h1>', esc(m.title), '</h1>',
     '<p class="sub">', esc(m.lib), ' library', m.serial ? ' · s/n ' + esc(m.serial) : '',
     '</p></div></div></div>');
@@ -242,6 +246,9 @@ export async function openPdf(host, blob, url, opts) {
     '<button type="button" class="pvbtn" id="pvnext" aria-label="Next page" disabled>›</button>',
     '</div>',
     '<p class="hint" id="pvmsg">', part ? 'Looking for ' + esc(part) + '…' : '', '</p>',
+    part ? '<div class="pagebar"><button type="button" class="btn primary" id="pvadd">+ Add '
+      + esc(part) + ' to a parts request</button><span id="pvbasket">' + basketBar() + '</span></div>'
+      : '<span id="pvbasket">' + basketBar() + '</span>',
     '<div class="pdfpage" id="pvpage"><canvas id="pvcanvas"></canvas></div>',
     '<p class="hint">', esc(o.name || ''), ' · ', mb(blob.size),
     ' · kept on this device. Pinch to zoom.</p>',
@@ -254,6 +261,15 @@ export async function openPdf(host, blob, url, opts) {
 
   const $ = id => host.querySelector('#' + id);
   const msg = t => { const m = $('pvmsg'); if (m) m.innerHTML = t; };
+  if (part) {
+    $('pvadd').onclick = () => {
+      const b = basketAdd([{ pn: part, qty: 1, desc: o.desc || '' }], o.unit || '');
+      const l = b.lines.find(x => key(x.pn) === pk);
+      $('pvadd').textContent = '✓ Added' + (l && l.qty > 1 ? ' — ' + l.qty + ' of them' : '')
+        + '. Tap again for one more.';
+      $('pvbasket').innerHTML = basketBar();
+    };
+  }
   let doc;
   try {
     const L = await pdfjs();
@@ -355,15 +371,138 @@ export async function openPdf(host, blob, url, opts) {
   }
 }
 
+/* ---------- parts to order ----------------------------------------------
+   What somebody has picked out of a book, waiting to go on a parts request.
+   Kept for the visit only (sessionStorage): it is a shopping list, not a
+   record - the record is the request it becomes. */
+const BKEY = 'bsds.partsBasket';
+export function basket() {
+  try { return JSON.parse(sessionStorage.getItem(BKEY) || 'null') || { unit: '', lines: [] }; }
+  catch (e) { return { unit: '', lines: [] }; }
+}
+function keepBasket(b) { try { sessionStorage.setItem(BKEY, JSON.stringify(b)); } catch (e) {} }
+export function basketClear() { try { sessionStorage.removeItem(BKEY); } catch (e) {} }
+/* Same part twice adds to the quantity rather than making a second line. */
+export function basketAdd(lines, unit) {
+  const b = basket();
+  if (unit && !b.unit) b.unit = unit;
+  (lines || []).forEach(l => {
+    const pn = String(l.pn || '').trim();
+    const desc = String(l.desc || '').trim();
+    if (!pn && !desc) return;
+    const qty = Math.max(1, Number(l.qty) || 1);
+    const at = b.lines.find(x => pn ? key(x.pn) === key(pn) : (!x.pn && x.desc === desc));
+    if (at) at.qty = (Number(at.qty) || 0) + qty;
+    else b.lines.push({ pn, qty, desc });
+  });
+  keepBasket(b);
+  return b;
+}
+export function basketBar() {
+  const n = basket().lines.length;
+  return n ? '<button type="button" class="basketbar" data-go="parts"><b>' + n + ' part'
+    + (n === 1 ? '' : 's') + ' to order</b><span>Put them on a parts request ›</span></button>' : '';
+}
+
 /* A converted Epiroc book: a whole page with its own scripts. It is shown in
    a SEALED frame - scripts yes, but an opaque origin - so it cannot reach the
-   app's sign-in, its database or its cached books. Its order tray still
-   works; it just does not survive closing the book, which is the price. */
+   app's sign-in, its database or its cached books.
+
+   That seal is also why its own order tray could not get out: it saves by
+   download, by clipboard, or through claude.ai's save - and none of those
+   reach out of a sealed frame. So a small helper is put into the page that
+   does two things, and only by message to the app around it:
+     - hands over the tray, read through the book's own orderRows(), when the
+       app asks - that is the "send to a parts request" button;
+     - passes the book's order-sheet file up for the app to save.
+   The book still cannot read anything of the app's; it can only send. */
+/* Some books (70165) keep all their code private, so their orderRows() cannot
+   be called from outside. Every book saves its tray to localStorage on each
+   tap, though - which a sealed frame refuses. The helper stands in an
+   in-memory store, so the save succeeds and the tray can be read from it. */
+const SHIM = '<script>(function(){'
+  + 'var mem={},ls={getItem:function(k){return Object.prototype.hasOwnProperty.call(mem,k)?mem[k]:null},'
+  + 'setItem:function(k,v){mem[k]=String(v)},removeItem:function(k){delete mem[k]},'
+  + 'clear:function(){mem={}},key:function(i){return Object.keys(mem)[i]||null}};'
+  + 'Object.defineProperty(ls,"length",{get:function(){return Object.keys(mem).length}});'
+  + 'try{Object.defineProperty(window,"localStorage",{configurable:true,get:function(){return ls}})}catch(e){}'
+  + 'function stored(){var out=[];Object.keys(mem).forEach(function(k){try{var o=JSON.parse(mem[k]);'
+  + 'if(o&&o.tray&&o.tray.length&&o.tray[0].pn!==undefined){var u=(o.who&&o.who.unit)||"";'
+  + 'o.tray.forEach(function(t){out.push([t.pn,t.q,t.nm||"",u])})}}catch(e){}});return out}'
+  + 'function up(m){try{parent.postMessage(m,"*")}catch(e){}}'
+  + 'function save(name,data){up({bsds:"save",filename:name,data:data})}'
+  + 'window.claude={use:function(n){return n==="downloads"?Promise.resolve({save:function(o){'
+  + 'save(o.filename,o.data);return Promise.resolve()}}):Promise.reject(new Error("none"))}};'
+  + 'addEventListener("load",function(){try{if(window.XLSX&&XLSX.writeFile){'
+  + 'XLSX.writeFile=function(wb,name){save(name,XLSX.write(wb,{bookType:"xlsx",type:"array"}))}}}catch(e){}});'
+  + 'addEventListener("message",function(e){if(e.source!==parent||!e.data||e.data.bsds!=="tray?")return;'
+  + 'var rows=[],cols=[];try{rows=orderRows();cols=COLS}catch(x){}'
+  + 'if(!rows.length){rows=stored();cols=["Part number","Qty","Description","Unit"]}'
+  + 'up({bsds:"tray",cols:cols,rows:rows})});'
+  + '})();</script>';
+
+export function withShim(html) {
+  const s = String(html || '');
+  const m = s.match(/<head[^>]*>/i);
+  return m ? s.replace(m[0], m[0] + SHIM) : SHIM + s;
+}
+
+/* The book's rows, by its own column names, as request lines. Where a book
+   carries an Epiroc order number beside the number printed in it, the order
+   number is the one to order by. */
+export function trayLines(cols, rows) {
+  const at = name => (cols || []).findIndex(c => String(c).toLowerCase() === name);
+  const iOrd = at('order number');
+  const iPn = iOrd >= 0 ? iOrd : at('part number') >= 0 ? at('part number') : at('part number in book');
+  const iQty = at('qty'), iDesc = at('description'), iUnit = at('unit');
+  let unit = '';
+  const lines = (rows || []).map(r => {
+    if (iUnit >= 0 && r[iUnit] && !unit) unit = String(r[iUnit]);
+    return { pn: iPn >= 0 ? r[iPn] : '', qty: iQty >= 0 ? r[iQty] : 1, desc: iDesc >= 0 ? r[iDesc] : '' };
+  }).filter(l => l.pn || l.desc);
+  return { lines, unit };
+}
+
+let FRAME = null;          /* the book frame on screen, the only one listened to */
+let onTray = null;
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('message', e => {
+    if (!FRAME || e.source !== FRAME.contentWindow || !e.data) return;
+    const d = e.data;
+    if (d.bsds === 'tray' && onTray) { const f = onTray; onTray = null; f(d); return; }
+    if (d.bsds === 'save' && d.data) {
+      const name = String(d.filename || 'Parts order.xlsx').replace(/[\\/:*?"<>|]+/g, ' ');
+      const url = URL.createObjectURL(new Blob([d.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = name;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
+  });
+}
+
+/* Ask the book on screen for its tray. */
+export function askTray(timeout) {
+  return new Promise((res, rej) => {
+    if (!FRAME) { rej(new Error('No book is open.')); return; }
+    const t = setTimeout(() => { onTray = null; rej(new Error('The book did not answer.')); }, timeout || 4000);
+    onTray = d => { clearTimeout(t); res(d); };
+    FRAME.contentWindow.postMessage({ bsds: 'tray?' }, '*');
+  });
+}
+
 export function drawPage(host, html, title, ctx) {
   const o = ctx || {};
-  host.innerHTML = '<div class="frame' + (o.banner ? ' withbanner' : '') + '">'
-    + (o.banner ? '<div class="framebanner">' + o.banner + '</div>' : '')
+  /* a manual or schematic has no parts tray, so no button that would find none */
+  const bar = o.noTray ? '' : '<div class="pagebar"><button type="button" class="btn primary" id="pgsend">'
+    + 'Send this book’s list to a parts request</button>' + basketBar() + '</div>';
+  const top = (o.banner || '') + bar;
+  host.innerHTML = '<div class="frame' + (top ? ' withbanner' : '') + '">'
+    + (top ? '<div class="framebanner">' + top + '</div>' : '')
     + '<iframe sandbox="allow-scripts allow-popups allow-downloads allow-modals" title="'
     + esc(title) + '" referrerpolicy="no-referrer"></iframe></div>';
-  host.querySelector('iframe').srcdoc = html;
+  FRAME = host.querySelector('iframe');
+  FRAME.srcdoc = withShim(html);
 }

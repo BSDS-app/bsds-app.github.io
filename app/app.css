@@ -515,6 +515,15 @@ h2.sec{color:var(--ink2);font-weight:700}
 .pdfpage{margin-top:10px;background:#fff;border:1px solid var(--rule);
   border-radius:var(--r);overflow:auto}
 .pdfpage canvas{display:block;margin:0 auto}
+/* parts picked out of a book, waiting to become a request */
+.pagebar{display:flex;flex-direction:column;gap:8px;margin:10px 0 0}
+.pagebar .btn{margin:0}
+.basketbar{display:flex;width:100%;align-items:center;justify-content:space-between;gap:10px;
+  min-height:52px;margin-top:10px;padding:10px 14px;border:0;border-radius:var(--r);
+  background:var(--orange);color:#fff;font:inherit;text-align:left}
+.basketbar b{font:700 17px/1.1 var(--cond);letter-spacing:.03em;text-transform:uppercase}
+.basketbar span{font-size:13px;opacity:.95}
+.framebanner .pagebar{margin:0 0 8px}
 .pvjump{min-height:44px;min-width:44px;padding:0 10px;margin:2px;border-radius:9px;
   border:1px solid var(--rule);background:var(--card);color:var(--ink);font:600 14px/1 var(--sans)}
 .note code{font:500 12px/1.5 var(--mono);word-break:break-word}

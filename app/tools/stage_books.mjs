@@ -273,28 +273,39 @@ export function run(argv, opts) {
       + `${plan.manifest.parts} parts indexed`);
   }
 
-  /* Epiroc: one page each, from the folder they were downloaded into. The
-     titles and serials come from config.js, which already lists them. */
-  const epDir = path.join(booksDir, 'epiroc');
-  if (fs.existsSync(epDir)) {
-    const cfg = fs.readFileSync(path.join(repo, 'config.js'), 'utf8');
-    for (const name of fs.readdirSync(epDir)) {
-      const page = path.join(epDir, name, 'index.html');
+  /* Single pages built by hand earlier, one folder each: the Epiroc parts
+     books (<books>/epiroc) and the reference shelf of schematics and manuals
+     (<books>/shelves). Titles - and for books, serials - come from config.js,
+     which already lists them. A shelf page carries no serial on purpose: it
+     is not any one machine's book and must never match one. */
+  const cfg = fs.readFileSync(path.join(repo, 'config.js'), 'utf8');
+  const PAGES = [
+    { dir: 'epiroc', prefix: 'epiroc-', lib: 'Epiroc', shelf: false },
+    { dir: 'shelves', prefix: 'shelf-', lib: 'Reference', shelf: true },
+  ];
+  for (const P of PAGES) {
+    const dir = path.join(booksDir, P.dir);
+    if (!fs.existsSync(dir)) continue;
+    for (const name of fs.readdirSync(dir)) {
+      const page = path.join(dir, name, 'index.html');
       if (!fs.existsSync(page)) continue;
-      const m = cfg.match(new RegExp("\\{ id: '" + name + "',\\s*title: '([^']*)',\\s*serial: '([^']*)'"));
-      const id = 'epiroc-' + slug(name);
-      const { html, count } = inlineFigures(fs.readFileSync(page, 'utf8'), path.join(epDir, name, 'fig'));
+      const m = cfg.match(new RegExp("\\{ id: '" + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        + "',\\s*title: '([^']*)'(?:,\\s*serial: '([^']*)')?"));
+      const serial = P.shelf ? '' : (m && m[2]) || '';
+      const id = P.prefix + slug(name);
+      const { html, count } = inlineFigures(fs.readFileSync(page, 'utf8'), path.join(dir, name, 'fig'));
       const out = path.join(stage, id);
       fs.mkdirSync(out, { recursive: true });
       fs.writeFileSync(path.join(out, 'book.html'), html);
       const title = m ? m[1] : name;
       writeJson(path.join(out, 'manifest.json'), {
-        v: 1, kind: 'html', id, title, lib: 'Epiroc', folder: name, serial: m ? m[2] : '',
-        file: 'book.html', builtAt: new Date().toISOString().slice(0, 10) });
+        v: 1, kind: 'html', id, title, lib: P.lib, folder: name, serial,
+        shelf: P.shelf || undefined, file: 'book.html', builtAt: new Date().toISOString().slice(0, 10) });
       const mb = Buffer.byteLength(html) / 1048576;
-      stored.push({ id, kind: 'html', title, lib: 'Epiroc', folder: name, ref: name,
-                    serial: m ? m[2] : '', files: 1, mb: Math.round(mb * 10) / 10 });
-      log(`${id.padEnd(34)}   1 page  ${mb.toFixed(1).padStart(5)} MB  ${count} drawings folded in`);
+      stored.push({ id, kind: 'html', title, lib: P.lib, folder: name, ref: name, serial,
+                    shelf: P.shelf || undefined, files: 1, mb: Math.round(mb * 10) / 10 });
+      log(`${id.padEnd(34)}   1 page  ${mb.toFixed(1).padStart(5)} MB  `
+        + (P.shelf ? 'reference' : count + ' drawings folded in'));
     }
   }
 

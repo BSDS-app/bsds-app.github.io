@@ -369,7 +369,13 @@ enforced in `firestore.rules`, not just on the screen.
 ## Parts books in storage
 
 **What is up there.** Every machine matched by serial — 14 Toolman books —
-plus the 7 Epiroc books that were converted by hand earlier. About 4.9 GB,
+plus the 7 Epiroc books that were converted by hand earlier, plus the
+reference shelf: D65 schematics, the Epiroc schematic map, *Which manual does
+this drill take*, the DM45/DM50/DML manual and the three DI550 manuals. Those
+used to be links to claude.ai pages, which are private to the account that
+made them — a tech could not open them. Now they open in the app like the
+books, behind the sign-in. They carry no serial, so none of them can ever be
+matched to a machine as its book. Only the Drive folder still links out. About 4.9 GB,
 just inside the 5 GB Storage gives away free. Not the whole 255 GB of Toolman
 libraries: 647 books nobody has asked for is a bill and a week of uploading.
 
@@ -389,7 +395,17 @@ opens on the page the number is printed on, marks it in orange, and lists the
 other pages it appears on. Big ‹ › buttons turn the page; the drawing is on
 the same page as the list in newer books and the page before in older ones.
 Open and Save are still underneath as a way out. `test/real-book.check.mjs`
-runs this against a real staged chapter and saves a phone-sized screenshot. Signing out clears what was kept.
+runs this against a real staged chapter and saves a phone-sized screenshot.
+
+**From a book to a parts request.** On a page opened from a part search,
+**+ Add to a parts request** puts it on a list (tap again for one more). In
+an Epiroc book, tick parts on its own tray as before, then **Send this book's
+list to a parts request** above it. Either way an orange bar shows how many
+are waiting, and tapping it opens Order parts with the lines filled in and
+the machine set — the person checks and sends. The list is cleared once the
+request is sent. Inside the sealed frame the Epiroc books' own order-sheet
+download works again: a small helper put into the page hands the file to the
+app to save, and keeps the tray in memory so it can be read. Signing out clears what was kept.
 
 The Epiroc books open inside the app as well, in a **sealed frame**: their
 own scripts run, but they cannot touch the app's sign-in or database. The

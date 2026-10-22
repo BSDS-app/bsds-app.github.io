@@ -74,6 +74,9 @@ put(path.join(REPO, 'config.js'), [
   "  books: [",
   "    { id: '70165', title: 'DM45-HP 70165',   serial: '70165', url: 'x' },",
   "    { id: 'd65',   title: 'D65',             serial: '',      url: 'y' },",
+  "  ],",
+  "  shelves: [",
+  "    { id: 'which-manual', title: 'Which Manual Does This Drill Take', url: 'z' },",
   "  ] };"].join('\n'));
 put(path.join(REPO, 'books.data.json'), JSON.stringify({
   libraries: { Ranger: LIB, Leopard: LIB, Pantera: LIB },
@@ -98,6 +101,8 @@ put(path.join(BOOKS, 'epiroc', '70165', 'index.html'),
 put(path.join(BOOKS, 'epiroc', '70165', 'fig', 'p010.webp'), 'RIFF10');
 put(path.join(BOOKS, 'epiroc', '70165', 'fig', 'p012.webp'), 'RIFF12');
 put(path.join(BOOKS, 'epiroc', 'd65', 'index.html'), '<p>self contained</p>');
+/* a manual off the reference shelf */
+put(path.join(BOOKS, 'shelves', 'which-manual', 'index.html'), '<p>which manual</p>');
 
 const lines = [];
 const out = run([], { booksDir: BOOKS, repo: REPO, log: s => lines.push(s) });
@@ -142,6 +147,11 @@ const e70165 = stored.books.find(b => b.id === 'epiroc-70165');
 ok(e70165.serial === '70165' && e70165.ref === '70165' && e70165.title === 'DM45-HP 70165',
   'the Epiroc entry carries its serial from config.js', JSON.stringify(e70165));
 ok(stored.books.find(b => b.id === 'epiroc-d65').serial === '', 'and D65 carries none, because it has none');
+const shelf = stored.books.find(b => b.id === 'shelf-which-manual');
+ok(shelf && shelf.shelf === true && shelf.title === 'Which Manual Does This Drill Take' && shelf.lib === 'Reference',
+  'a manual off the shelf goes up, marked as reference', JSON.stringify(shelf));
+ok(shelf && shelf.serial === '', 'and carries no serial, so it can never stand in for a machine’s book');
+ok(has('shelf-which-manual/book.html'), 'its page is staged');
 ok(!JSON.stringify(stored).includes(LIB.replace(/\\/g, '\\\\')), 'no workstation paths leak into the public list');
 
 /* ---- adding one later -------------------------------------------------- */

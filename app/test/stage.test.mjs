@@ -63,6 +63,9 @@ put(path.join(LIB, 'Ranger DX800 T4 47047', 'autorun.bat'), 'x');
 const B = path.join(LIB, 'Leopard DI650 82517');
 put(path.join(B, 'sp', '03.pdf'), 'p');
 put(path.join(B, 'op', 'operators_manual.pdf'), 'o');
+/* the same engine manual on both CDs - byte for byte */
+put(path.join(A, 'cat', 'PM engine.pdf'), 'SAME ENGINE MANUAL');
+put(path.join(B, 'cat', 'PM engine.pdf'), 'SAME ENGINE MANUAL');
 /* the near miss: in the library, NOT matched - must not go up */
 put(path.join(LIB, 'Leopard DI550 S5 60673', 'sp', '03.pdf'), 'nearmiss');
 /* asked for by name */
@@ -128,6 +131,25 @@ ok(ch16 && /Chapter 16/.test(ch16.t) && /Towing eye/.test(ch16.t) && ch16.ch ===
   'a chapter is named for what is in it', ch16 && ch16.t);
 ok(man.parts === 5 && has('tm-ranger-dx800-t4-47047/index.json'), 'the part index goes up with it');
 ok(!has('tm-leopard-di650-82517/index.json'), 'a book with no index gets none, not an empty one');
+
+/* ---- shared files are kept once ---------------------------------------- */
+ok(has('tm-leopard-di650-82517/files/cat/PM engine.pdf'), 'a shared manual is kept in one book');
+ok(!has('tm-ranger-dx800-t4-47047/files/cat/PM engine.pdf'), 'THE POINT: and not copied into the other');
+const eng = man.sections.flatMap(s => s.files).find(f => f.p === 'cat/PM engine.pdf');
+ok(eng && eng.o === 'tm-leopard-di650-82517/files/cat/PM engine.pdf',
+  'the other book points at the one copy', eng && eng.o);
+ok(man.sections.flatMap(s => s.files).filter(f => f.o).length === 1, 'and nothing that is not shared is pointed away');
+const show = Object.fromEntries(man.sections.map(s => [s.key, s.show]));
+ok(show.sp === 'open' && show.cat === 'fold' && show.ws === 'fold' && show.info === 'papers',
+  'spare parts open, manuals folded, CD paperwork in the pile', JSON.stringify(show));
+ok(man.sections.find(s => s.key === 'info').files.some(f => f.p === 'home.pdf'),
+  'the CD home page goes in the paperwork, not in front');
+
+/* a copy left from an earlier run, now held elsewhere, is cleared out */
+put(path.join(S, 'tm-ranger-dx800-t4-47047', 'files', 'cat', 'PM engine.pdf'), 'SAME ENGINE MANUAL');
+run([], { booksDir: BOOKS, repo: REPO, log: () => {} });
+ok(!has('tm-ranger-dx800-t4-47047/files/cat/PM engine.pdf'), 'a stale duplicate is removed on the next run');
+ok(fs.existsSync(path.join(S, '.hashes.json')), 'fingerprints are remembered, so a re-run does not re-read everything');
 
 /* ---- Epiroc ------------------------------------------------------------ */
 const page = fs.readFileSync(path.join(S, 'epiroc-70165', 'book.html'), 'utf8');

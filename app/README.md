@@ -379,7 +379,19 @@ matched to a machine as its book. Only the Drive folder still links out. About 4
 just inside the 5 GB Storage gives away free. Not the whole 255 GB of Toolman
 libraries: 647 books nobody has asked for is a bill and a week of uploading.
 
-**Opening one.** A machine's page has **Open the book**. The Parts books
+**Kept once.** The CDs repeat themselves — the same Cat engine manual,
+warranty and CD help on most of them. Each file is fingerprinted; the first
+book (by id) keeps it and every other book's manifest points at that copy
+(`o` in the manifest). 154 files, 0.8 GB, are stored once instead of up to six
+times, which keeps the bucket at 4.1 GB, under the free 5 GB — and a phone
+downloads a shared manual once for every rig that uses it. The upload makes
+the bucket match the staging folder, deleting copies that are now kept
+elsewhere. **Deploy the app before a re-upload that moves shared files**, or
+the live app looks for them where they used to be.
+
+**Opening one.** Machines → customer → rig → **Open the parts book**, or
+the Parts books screen. The customer's rig list marks the rigs whose book
+is in the app. The Parts books
 screen lists everything that is in the app. A Toolman book opens on its
 contents — spare parts first, then workshop, maintenance, operator, engine —
 and, for 12 of the 14, a **part search** (the DX800 S5 68792 and DI650

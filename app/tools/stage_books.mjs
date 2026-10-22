@@ -39,6 +39,7 @@
 import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
 const REPO = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -51,15 +52,19 @@ export const slug = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-
 /* What each Toolman folder is, in the words a tech would use. Order is the
    order they are listed in the app: parts first, because that is why anyone
    opens a parts book. */
+/* The third column is how the app shows it: spare parts open, the manuals
+   folded until tapped, and the CD's own paperwork - warranties, feedback
+   forms, help for the old CD viewer, its contents pages - in one closed
+   "other papers" pile at the bottom. Nothing is dropped; it is just out of
+   the way of the thing people came for. */
 export const SECTIONS = [
-  ['sp', 'Spare parts'],
-  ['ws', 'Workshop'],
-  ['ma', 'Maintenance'],
-  ['op', 'Operator'],
-  ['cat', 'Engine (Cat)'],
-  ['rocktools', 'Rock tools'],
-  ['info', 'Safety, warranty and info'],
-  ['', 'Other'],
+  ['sp', 'Spare parts', 'open'],
+  ['ws', 'Workshop', 'fold'],
+  ['ma', 'Maintenance', 'fold'],
+  ['op', 'Operator', 'fold'],
+  ['cat', 'Engine (Cat)', 'fold'],
+  ['rocktools', 'Rock tools', 'fold'],
+  ['info', 'Other papers — warranty, safety notices, CD help', 'papers'],
 ];
 
 /* The Toolman part index. One line per part per assembly:
@@ -149,8 +154,8 @@ export function planToolman(folder, meta) {
   }
   const chapters = chapterTitles(rows);
 
-  const sections = SECTIONS.map(([key, title]) => ({ key, title, files: [] }));
-  const other = sections.find(s => s.key === '');
+  const sections = SECTIONS.map(([key, title, show]) => ({ key, title, show, files: [] }));
+  const other = sections.find(s => s.key === 'info');
   files.forEach(f => {
     const top = f.rel.includes('/') ? f.rel.split('/')[0].toLowerCase() : '';
     const sec = sections.find(s => s.key && s.key === top) || other;
@@ -256,13 +261,63 @@ export function run(argv, opts) {
   const stored = [];
   let copied = 0;
 
+  /* Plan every book first, so files shared between books can be found. */
+  const plans = [];
   for (const b of wanted.values()) {
     const src = path.join(libs[b.lib] || '', b.folder);
     if (!fs.existsSync(src)) { log('MISSING  ' + src + ' (skipped)'); continue; }
     const id = 'tm-' + slug(b.folder);
-    const plan = planToolman(src, { id, title: b.folder, lib: b.lib, folder: b.folder, serial: b.serial });
+    plans.push({ id, b, plan: planToolman(src, { id, title: b.folder, lib: b.lib, folder: b.folder, serial: b.serial }) });
+  }
+
+  /* STORED ONCE. The CDs repeat themselves - the same Cat engine manual,
+     warranty and CD help on most of them. Each file is fingerprinted by its
+     content; the first book (by id, so the choice is stable from run to run)
+     keeps the copy, and every other book's manifest points at that one. A
+     phone then also downloads a shared manual once, not once per rig.
+     Fingerprints are remembered by path, size and date, so a re-run does not
+     re-read 5 GB. */
+  const hashFile = path.join(stage, '.hashes.json');
+  let hc = {};
+  try { hc = JSON.parse(fs.readFileSync(hashFile, 'utf8')); } catch (e) { hc = {}; }
+  const hashOf = f => {
+    const st = fs.statSync(f.full);
+    const k = f.full + '|' + st.size + '|' + Math.round(st.mtimeMs);
+    if (!hc[k]) hc[k] = crypto.createHash('sha1').update(fs.readFileSync(f.full)).digest('hex');
+    return hc[k];
+  };
+  plans.forEach(P => P.plan.files.forEach(f => { f.hash = hashOf(f); }));
+  fs.mkdirSync(stage, { recursive: true });
+  fs.writeFileSync(hashFile, JSON.stringify(hc));
+  const owner = new Map();
+  [...plans].sort((a, b) => a.id.localeCompare(b.id)).forEach(P =>
+    P.plan.files.forEach(f => { if (!owner.has(f.hash)) owner.set(f.hash, P.id + '/files/' + f.rel); }));
+
+  let sharedFiles = 0, sharedBytes = 0;
+  for (const P of plans) {
+    const { id, b, plan } = P;
     const out = path.join(stage, id);
-    plan.files.forEach(f => { if (copyIfNewer(f.full, path.join(out, 'files', ...f.rel.split('/')))) copied++; });
+    const keep = new Set();
+    const entry = {};
+    plan.manifest.sections.forEach(s => s.files.forEach(x => { entry[x.p] = x; }));
+    let own = 0;
+    plan.files.forEach(f => {
+      const home = owner.get(f.hash);
+      if (home === id + '/files/' + f.rel) {
+        keep.add(f.rel);
+        own += f.size;
+        if (copyIfNewer(f.full, path.join(out, 'files', ...f.rel.split('/')))) copied++;
+      } else {
+        entry[f.rel].o = home;          /* read it from the book that holds it */
+        sharedFiles++;
+        sharedBytes += f.size;
+      }
+    });
+    /* a copy staged by an earlier run that is now held elsewhere goes */
+    const filesDir = path.join(out, 'files');
+    if (fs.existsSync(filesDir)) {
+      walk(filesDir, '', []).forEach(x => { if (!keep.has(x.rel)) fs.unlinkSync(x.full); });
+    }
     writeJson(path.join(out, 'manifest.json'), plan.manifest);
     if (plan.index) writeJson(path.join(out, 'index.json'), plan.index);
     const mb = plan.files.reduce((s, f) => s + f.size, 0) / 1048576;
@@ -270,7 +325,10 @@ export function run(argv, opts) {
                   serial: b.serial || '', files: plan.files.length, mb: Math.round(mb),
                   parts: plan.manifest.parts });
     log(`${id.padEnd(34)} ${String(plan.files.length).padStart(3)} PDFs  ${mb.toFixed(0).padStart(4)} MB  `
-      + `${plan.manifest.parts} parts indexed`);
+      + `${(own / 1048576).toFixed(0).padStart(4)} MB its own  ${plan.manifest.parts} parts indexed`);
+  }
+  if (plans.length) {
+    log(`Shared: ${sharedFiles} files (${(sharedBytes / 1073741824).toFixed(2)} GB) are kept once and pointed to.`);
   }
 
   /* Single pages built by hand earlier, one folder each: the Epiroc parts
@@ -310,7 +368,7 @@ export function run(argv, opts) {
   }
 
   stored.sort((a, b) => a.id.localeCompare(b.id));
-  const total = stored.reduce((s, b) => s + b.mb, 0);
+  const total = walk(stage, '', []).filter(x => !x.rel.startsWith('.')).reduce((s, x) => s + x.size, 0) / 1048576;
   fs.writeFileSync(prevFile, JSON.stringify(
     { builtAt: new Date().toISOString().slice(0, 10), books: stored }, null, 1) + '\n');
   log(`\n${stored.length} books, about ${(total / 1024).toFixed(2)} GB. ${copied} files copied this run.`);
@@ -323,7 +381,12 @@ function upload(stage) {
   const bucket = bucketName();
   const dest = 'gs://' + bucket + '/books';
   console.log('\nUploading to ' + dest + ' - safe to stop and run again, it resumes.\n');
-  const r = spawnSync('gcloud', ['storage', 'rsync', stage, dest, '--recursive'],
+  /* The bucket is made to MATCH the staging folder: a copy that is now kept
+     in another book (or a book taken down) is deleted from it. Everything
+     under books/ comes from here, so nothing else is in the way. The
+     fingerprint cache stays on this machine. */
+  const r = spawnSync('gcloud', ['storage', 'rsync', '"' + stage + '"', dest, '--recursive',
+    '--delete-unmatched-destination-objects', '--exclude', '"^\\.hashes\\.json$"'],
     { stdio: 'inherit', shell: true });
   if (r.status !== 0) {
     console.error('\nThe upload stopped (exit ' + r.status + '). Run the same command again to carry on.');

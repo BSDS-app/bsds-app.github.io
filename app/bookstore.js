@@ -116,8 +116,17 @@ export async function manifest(entry) {
 export async function index(entry) {
   return JSON.parse(await (await fromBucket(objPath(entry, 'index.json'))).text());
 }
-export async function file(entry, rel) {
-  const b = await fromBucket(objPath(entry, 'files/' + rel));
+/* A file the CDs share (the same Cat manual on six of them) is kept once, in
+   one book; the manifest says where with `o`. Reading it by that one path
+   also means the phone keeps one copy for every rig that uses it. */
+export function fileEntry(m, rel) {
+  let hit = null;
+  ((m && m.sections) || []).forEach(s => s.files.forEach(f => { if (f.p === rel) hit = f; }));
+  return hit;
+}
+export async function file(entry, rel, m) {
+  const f = fileEntry(m, rel);
+  const b = await fromBucket(f && f.o ? 'books/' + f.o : objPath(entry, 'files/' + rel));
   /* Storage may hand it back untyped; a PDF viewer needs to be told. */
   return /\.pdf$/i.test(rel) && b.type !== 'application/pdf' ? new Blob([b], { type: 'application/pdf' }) : b;
 }
@@ -171,12 +180,23 @@ export function drawBook(host, entry, m, ctx) {
   } else {
     h.push('<p class="hint">This book has no part index, so look parts up chapter by chapter.</p>');
   }
-  (m.sections || []).forEach(s => {
-    h.push('<h2 class="sec">', esc(s.title), ' (', s.files.length, ')</h2><div class="list">');
-    s.files.forEach(f => h.push('<button class="row" data-bfile="', esc(f.p), '" data-book="',
-      esc(entry.id), '"><span><span class="nm">', esc(f.t), '</span><span class="sub">',
-      esc(f.p), ' · ', mb(f.b), '</span></span><span class="ct">Open</span></button>'));
-    h.push('</div>');
+  /* Spare parts open; manuals folded until tapped; the CD's own paperwork in
+     one closed pile at the bottom. Older manifests carry no `show`, so they
+     fall back to the same rule by folder. */
+  const rowsOf = s => s.files.map(f => '<button class="row" data-bfile="' + esc(f.p) + '" data-book="'
+    + esc(entry.id) + '"><span><span class="nm">' + esc(f.t) + '</span><span class="sub">'
+    + esc(f.p) + ' · ' + mb(f.b) + '</span></span><span class="ct">Open</span></button>').join('');
+  const show = s => s.show || (s.key === 'sp' ? 'open' : (s.key === 'info' || !s.key) ? 'papers' : 'fold');
+  const secs = (m.sections || []).slice()
+    .sort((a, b) => ['open', 'fold', 'papers'].indexOf(show(a)) - ['open', 'fold', 'papers'].indexOf(show(b)));
+  const folded = secs.filter(s => show(s) !== 'open');
+  secs.filter(s => show(s) === 'open').forEach(s => {
+    h.push('<h2 class="sec">', esc(s.title), ' (', s.files.length, ')</h2><div class="list">', rowsOf(s), '</div>');
+  });
+  if (folded.length) h.push('<h2 class="sec">Manuals and the rest</h2>');
+  folded.forEach(s => {
+    h.push('<details class="bsec', show(s) === 'papers' ? ' papers' : '', '"><summary><span>',
+      esc(s.title), '</span><b>', s.files.length, '</b></summary><div class="list">', rowsOf(s), '</div></details>');
   });
   h.push('</div>');
   host.innerHTML = h.join('');

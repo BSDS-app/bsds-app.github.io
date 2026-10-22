@@ -239,7 +239,9 @@ for (const size of [{ width: 390, height: 800 }, { width: 1200, height: 900 }]) 
   const spec = await page.locator('.spec').textContent();
   ok(/70165/.test(spec) && /Epiroc/i.test(spec),
     `${tag} the machine page shows what is on the record`, spec.replace(/\s+/g, ' ').slice(0, 90));
-  ok((await page.locator('.tile b').first().textContent()) === 'Parts book',
+  /* the book is looked up after the page draws, from the book index */
+  await page.waitForSelector('#rigbook .tile', { timeout: 10000 }).catch(() => {});
+  ok(/parts book/i.test((await page.locator('#rigbook .tile b').first().textContent().catch(() => '')) || ''),
     `${tag} 70165 offers its parts book`);
 
   // a machine with no serial must say so rather than offer a wrong book
@@ -249,7 +251,7 @@ for (const size of [{ width: 390, height: 800 }, { width: 1200, height: 900 }]) 
   await page.fill('#q', blank.unit);
   await page.waitForTimeout(300);
   await page.locator('[data-rig]').first().click();
-  await page.waitForTimeout(350);
+  await page.waitForSelector('#rigbook .note', { timeout: 10000 }).catch(() => {});
   const txt = await page.locator('.note').first().textContent();
   ok(/no serial/i.test(txt), `${tag} a rig with no serial explains why there is no book`,
     txt.replace(/\s+/g, ' ').slice(0, 80));

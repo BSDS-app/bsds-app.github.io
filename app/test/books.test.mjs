@@ -50,7 +50,13 @@ const DEMO_BOOKS = {
       { key: 'sp', title: 'Spare parts', files: [
         { p: 'sp/13.pdf', t: 'Chapter 13 — Tank Assembly', b: 5e6, ch: '13' },
         { p: 'sp/16.pdf', t: 'Chapter 16 — Towing eye', b: 1.6e7, ch: '16' }] },
-      { key: 'ws', title: 'Workshop', files: [{ p: 'ws/hydraulics.pdf', t: 'hydraulics', b: 1e7 }] }] }),
+      { key: 'ws', title: 'Workshop', show: 'fold', files: [{ p: 'ws/hydraulics.pdf', t: 'hydraulics', b: 1e7 }] },
+      { key: 'cat', title: 'Engine (Cat)', show: 'fold', files: [
+        { p: 'cat/PM engine.pdf', t: 'PM engine', b: 2e7, o: 'tm-leopard-di650-82517/files/cat/PM engine.pdf' }] },
+      { key: 'info', title: 'Other papers — warranty, safety notices, CD help', show: 'papers',
+        files: [{ p: 'info/warranty.pdf', t: 'warranty', b: 2e6 }] }] }),
+  /* the shared engine manual lives in ANOTHER book's folder */
+  'books/tm-leopard-di650-82517/files/cat/PM engine.pdf': makePdf(['CAT ENGINE MANUAL', 'page two']),
   [TM + 'index.json']: JSON.stringify({ v: 1, rows: [
     ['00302748', 'Pin', '16', '05502008f', 'Towing eye', '1', '4', ''],
     ['00302749', 'Pin, long', '16', '05502008f', 'Towing eye', '2', '5', ''],
@@ -291,6 +297,23 @@ const bookTxt = await page.textContent('#view');
 ok(/Spare parts/.test(bookTxt) && /Chapter 16/.test(bookTxt) && /Workshop/.test(bookTxt),
   'the book opens on its contents, parts first', bookTxt.slice(0, 160));
 ok(!/NOT THIS MACHINE/.test(bookTxt), 'a serial match carries no red banner');
+const fold = await page.evaluate(() => [...document.querySelectorAll('details.bsec')]
+  .map(d => (d.classList.contains('papers') ? 'papers:' : 'fold:') + (d.open ? 'open' : 'shut')));
+ok(fold.join() === 'fold:shut,fold:shut,papers:shut',
+  'manuals are folded away and the CD paperwork is in a closed pile', fold.join());
+ok(!(await page.isVisible('[data-bfile="info/warranty.pdf"]')), 'so a warranty is not in anyone’s way');
+const spVisible = await page.isVisible('[data-bfile="sp/16.pdf"]');
+ok(spVisible, 'while the spare-parts chapters are right there');
+
+/* a shared manual opens from the one copy, in the other book's folder */
+await page.click('details.bsec:nth-of-type(2) summary').catch(() => {});
+await tap({ 'data-bfile': 'cat/PM engine.pdf', 'data-book': 'tm-ranger-dx800-t4-47047' });
+await page.waitForFunction(() => /Page 1 of 2/.test((document.getElementById('pvpos') || {}).textContent || ''),
+  null, { timeout: 20000 }).catch(() => {});
+ok(/Page 1 of 2/.test(await page.textContent('#pvpos').catch(() => '')),
+  'THE POINT: a shared manual opens from the single stored copy');
+await tap({ 'data-openbook': 'tm-ranger-dx800-t4-47047', 'data-for': '3-rivers-drilling-blasting--DR617' });
+await page.waitForTimeout(400);
 await page.fill('#bpq', '00302748');
 await page.waitForTimeout(500);
 const hitTxt = await page.textContent('#bphits');
@@ -345,6 +368,27 @@ ok(/Page 1 of 3/.test(await pos()), 'a chapter opened from its list starts on pa
 const leaks = await page.evaluate(() => [...document.querySelectorAll('a[href]')]
   .filter(a => /firebasestorage|token=/.test(a.href)).length);
 ok(leaks === 0, 'no shareable storage link is ever put on the page');
+
+/* ---- Machines → customer → rig → book ---------------------------------- */
+await tap({ 'data-cust': '3-rivers-drilling-blasting' });
+await page.waitForTimeout(1200);
+const custRow = await page.evaluate(() => {
+  const r = document.querySelector('[data-rig="3-rivers-drilling-blasting--DR617"]');
+  return r ? r.textContent : '';
+});
+ok(/book/.test(custRow), 'on the customer’s list, a rig whose book is in the app says so', custRow);
+await tap({ 'data-rig': '3-rivers-drilling-blasting--DR617' });
+await page.waitForTimeout(800);
+ok(!!(await page.$('#rigbook [data-openbook="tm-ranger-dx800-t4-47047"][data-for="3-rivers-drilling-blasting--DR617"]')),
+  'THE POINT: the rig page opens its own book');
+ok(!/No parts book/.test(await page.textContent('#rigbook')), 'and no longer says it has none');
+await tap({ 'data-rig': 'wesco-ut--70165' });
+await page.waitForTimeout(800);
+ok(!!(await page.$('#rigbook [data-openbook="epiroc-70165"]')), 'a DM45 rig opens its converted book the same way');
+await tap({ 'data-rig': 'top-rock-blasting--1' });
+await page.waitForTimeout(800);
+ok(/No parts book/.test(await page.textContent('#rigbook').catch(() => '')) && !(await page.$('#rigbook [data-openbook]')),
+  'a rig with no book says so plainly, and offers nothing that is not its book');
 
 /* ---- a judgement pick keeps its banner all the way to the PDF --------- */
 await page.click('#signout');

@@ -352,7 +352,16 @@ function machineRow(e, withCustomer) {
     + '<span class="sub">' + (withCustomer ? esc(e.customerName) + ' · ' : '')
     + (e.model ? esc(e.model) : 'model not on the export') + '</span></span>'
     + '<span class="ct">' + (e.serial ? '<b>' + esc(e.serial) + '</b>' : '<b>—</b>')
-    + (bookFor(e.serial) ? 'book' : '') + '</span></button>';
+    + (hasBook(e) ? 'book' : '') + '</span></button>';
+}
+
+/* "book" beside a rig means it opens one in the app: a serial match or a
+   judgement pick that is in storage. Until the index has loaded, the old
+   converted-book list is the best answer there is. */
+function hasBook(e) {
+  if (!book.loaded()) return !!bookFor(e.serial);
+  const v = book.forMachine(e.id, bookPicks);
+  return !!(v.book && book.storedFor(v.book)) || !!bookFor(e.serial);
 }
 
 function customer(cid) {
@@ -375,6 +384,13 @@ function customer(cid) {
     h.push('</div>');
   }
   h.push('<div class="list">', live.map(e => machineRow(e, false)).join(''), '</div>');
+  /* first visit: fetch the book index, then mark the rigs that have one */
+  if (!book.loaded()) {
+    book.load().then(async () => {
+      if (!Object.keys(bookPicks).length) bookPicks = await book.picks();
+      if (route.view === 'customer' && route.arg === cid) customer(cid);
+    }).catch(() => {});
+  }
   if (gone.length) {
     h.push('<h2 class="sec">Retired</h2><div class="list">',
       gone.map(e => machineRow(e, false)).join(''), '</div>');
@@ -405,21 +421,51 @@ function machine(id) {
     cell('Year', e.year), cell('Meter', e.meter == null ? '' : e.meter.toLocaleString()),
     '</div>');
 
-  h.push('<h2 class="sec">Documentation</h2>');
-  if (bk) {
-    h.push('<div class="tiles"><a class="tile blue" href="', esc(bk.url),
-      '" target="_blank" rel="noopener">',
-      tileFace('Parts book', bk.title, 'book',
-        '<em class="leaves">Opens in a new tab</em>'), '</a></div>');
-  } else {
-    h.push('<div class="note"><b>No parts book built for this serial yet.</b> ',
-      e.serial ? 'The original is in the parts-book library; it has not been converted.'
-               : 'There is no serial on the Fullbay record, and the books are laid out '
-                 + 'by serial — so this one cannot be matched until the plate is read.',
-      '</div>');
-  }
+  h.push('<h2 class="sec">Parts book</h2>',
+    '<div id="rigbook"><div class="empty">Looking up its book…</div></div>');
   h.push('</div>');
   $('view').innerHTML = h.join('');
+  rigBook(e, bk);
+}
+
+/* The rig's own book, on the rig's own page - Machines → customer → rig →
+   book. Same rule as everywhere else: matched by serial, or chosen by
+   judgement and marked, or plainly none. books.js decides; this only draws. */
+async function rigBook(e, legacy) {
+  const host = $('rigbook');
+  if (!host) return;
+  let v = null, s = null;
+  try {
+    await book.load();
+    if (!Object.keys(bookPicks).length) bookPicks = await book.picks();
+    v = book.forMachine(e.id, bookPicks);
+    s = book.storedFor(v.book);
+  } catch (err) { v = null; }
+  if (route.view !== 'rig' || route.arg !== e.id || !$('rigbook')) return;   /* they moved on */
+  const h = [];
+  if (s && v) {
+    h.push(book.banner(v), '<div class="tiles"><button class="tile blue" data-openbook="', esc(s.id),
+      '" data-for="', esc(e.id), '">',
+      tileFace(v.how === 'judgement' ? 'Parts book — by judgement' : 'Open the parts book', s.title, 'book',
+        '<em class="leaves">' + (s.kind === 'pdf' ? s.files + ' PDFs' + (s.parts ? ' · part search' : '')
+          : 'Converted book') + '</em>'), '</button></div>');
+  } else if (legacy) {
+    /* a converted book not put up yet still opens where it always has */
+    h.push('<div class="tiles"><a class="tile blue" href="', esc(legacy.url), '" target="_blank" rel="noopener">',
+      tileFace('Parts book', legacy.title, 'book', '<em class="leaves">Opens in a new tab</em>'), '</a></div>');
+  } else if (v && v.book) {
+    h.push('<div class="note"><b>Its book is ', esc(v.book.folder), '</b>, but it is not in the app yet.</div>');
+  } else {
+    h.push('<div class="note"><b>No parts book for this machine.</b> ',
+      e.serial ? 'Nothing in the libraries carries serial ' + esc(e.serial) + '.'
+               : 'There is no serial on the record, and the books are laid out by serial — '
+                 + 'so this one cannot be matched until the plate is read.',
+      '</div>');
+  }
+  h.push('<div class="list" style="margin-top:10px"><button class="row" data-bookfor="', esc(e.id),
+    '"><span><span class="nm">', v && v.how !== 'none' ? 'How this book was matched' : 'Choose a book by judgement',
+    '</span><span class="sub">', esc((v && book.STATE[v.state]) || ''), '</span></span><span class="ct">›</span></button></div>');
+  host.innerHTML = h.join('');
 }
 
 function cell(label, v) {
@@ -556,7 +602,8 @@ async function bookFile(arg) {
     await book.load();
     const entry = bstore.byId(id);
     if (!entry) throw new Error('That book is not in the app.');
-    const b = await bstore.file(entry, rel);
+    const man = (BOOK && BOOK.entry && BOOK.entry.id === id && BOOK.m) || await bstore.manifest(entry);
+    const b = await bstore.file(entry, rel, man);
     if (route.view !== 'bfile' || route.arg !== arg) return;
     if (fileUrl) URL.revokeObjectURL(fileUrl);
     fileUrl = URL.createObjectURL(b);

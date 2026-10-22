@@ -515,6 +515,18 @@ h2.sec{color:var(--ink2);font-weight:700}
 .pdfpage{margin-top:10px;background:#fff;border:1px solid var(--rule);
   border-radius:var(--r);overflow:auto}
 .pdfpage canvas{display:block;margin:0 auto}
+/* a book's manuals, folded until tapped; the CD paperwork quieter still */
+details.bsec{margin-top:8px;background:var(--card);border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
+details.bsec summary{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  min-height:52px;padding:0 16px;cursor:pointer;font:600 15px/1.25 var(--sans);color:var(--ink);list-style:none}
+details.bsec summary::-webkit-details-marker{display:none}
+details.bsec summary::after{content:"\203A";font-size:22px;color:var(--dim);transition:transform .15s}
+details.bsec[open] summary::after{transform:rotate(90deg)}
+details.bsec summary b{margin-left:auto;font:500 12px/1 var(--mono);color:var(--dim)}
+details.bsec .list{border:0;border-top:1px solid var(--rule);border-radius:0}
+details.bsec.papers{opacity:.8}
+details.bsec.papers summary{font-weight:500;color:var(--ink2)}
+
 /* parts picked out of a book, waiting to become a request */
 .pagebar{display:flex;flex-direction:column;gap:8px;margin:10px 0 0}
 .pagebar .btn{margin:0}

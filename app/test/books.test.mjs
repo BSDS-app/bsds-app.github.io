@@ -21,6 +21,28 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 /* A stand-in bucket. In the preview the app reads books from ./books-demo/
    instead of Cloud Storage; these are the files it finds there. */
 const TM = 'books/tm-ranger-dx800-t4-47047/';
+
+/* A real (tiny) PDF, one line of text per page, laid out the way a Toolman
+   chapter is: contents first, then a drawing, then its parts list. */
+function makePdf(pages) {
+  const objs = ['<< /Type /Catalog /Pages 2 0 R >>',
+    `<< /Type /Pages /Kids [${pages.map((_, i) => `${3 + i * 2} 0 R`).join(' ')}] /Count ${pages.length} >>`];
+  const font = 3 + pages.length * 2;
+  pages.forEach(txt => {
+    const c = `BT /F1 18 Tf 72 700 Td (${txt}) Tj ET`;
+    objs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${font} 0 R >> >> /Contents ${objs.length + 2} 0 R >>`);
+    objs.push(`<< /Length ${c.length} >>\nstream\n${c}\nendstream`);
+  });
+  objs.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  let out = '%PDF-1.4\n';
+  const at = [];
+  objs.forEach((o, i) => { at.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const x = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`
+    + at.map(n => String(n).padStart(10, '0') + ' 00000 n \n').join('')
+    + `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF`;
+  return out;
+}
 const DEMO_BOOKS = {
   [TM + 'manifest.json']: JSON.stringify({ v: 1, kind: 'pdf', id: 'tm-ranger-dx800-t4-47047',
     title: 'Ranger DX800 T4 47047', lib: 'Ranger', folder: 'Ranger DX800 T4 47047', serial: '47047',
@@ -33,7 +55,8 @@ const DEMO_BOOKS = {
     ['00302748', 'Pin', '16', '05502008f', 'Towing eye', '1', '4', ''],
     ['00302749', 'Pin, long', '16', '05502008f', 'Towing eye', '2', '5', ''],
     ['03246358', 'Clip', '13', '55190585e', 'Tank Assembly', '1', '*49', '78']] }),
-  [TM + 'files/sp/16.pdf']: '%PDF-1.4 stand-in',
+  [TM + 'files/sp/16.pdf']: makePdf(['TABLE OF CONTENTS 16 TOWING EYE', 'TOWING EYE drawing 1 2 3',
+                                     'TOWING EYE parts 00302748 Pin 1']),
   'books/epiroc-d65/manifest.json': JSON.stringify({ v: 1, kind: 'html', id: 'epiroc-d65',
     title: 'D65', lib: 'Epiroc', serial: '', file: 'book.html' }),
   'books/epiroc-d65/book.html': '<p id="inside">D65 book</p><script>'
@@ -128,6 +151,16 @@ const browser = await chromium.launch({
     ? { executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' } : {}),
 });
 const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+/* the page viewer loads pdf.js from jsDelivr; serve the same pinned files
+   from node_modules so this runs without a network */
+const PDFJS_DIR = path.join(ROOT, 'node_modules', 'pdfjs-dist');
+await ctx.route('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/**', route => {
+  const rel = new URL(route.request().url()).pathname.replace(/^\/npm\/pdfjs-dist@3\.11\.174\//, '');
+  const f = path.join(PDFJS_DIR, ...rel.split('/'));
+  if (!f.startsWith(PDFJS_DIR) || !fs.existsSync(f)) return route.fulfill({ status: 404, body: '' });
+  return route.fulfill({ status: 200, body: fs.readFileSync(f),
+    contentType: /\.js$/.test(f) ? 'text/javascript' : 'application/octet-stream' });
+});
 const page = await ctx.newPage();
 const errs = [];
 page.on('pageerror', e => errs.push(String(e)));
@@ -255,9 +288,29 @@ await page.waitForTimeout(500);
 const hitTxt = await page.textContent('#bphits');
 ok(/00302748/.test(hitTxt) && /Ch 16/.test(hitTxt), 'a part number goes straight to its chapter', hitTxt.slice(0, 120));
 await page.click('#bphits [data-bfile="sp/16.pdf"]');
-await page.waitForTimeout(600);
+const pos = () => page.textContent('#pvpos').catch(() => '');
+await page.waitForFunction(() => /Page 3 of 3/.test((document.getElementById('pvpos') || {}).textContent || ''),
+  null, { timeout: 20000 }).catch(() => {});
+ok(/Page 3 of 3/.test(await pos()),
+  'THE POINT: a searched part opens on the page it is printed on, not the contents', await pos());
+const found = (await page.textContent('#pvmsg').catch(() => '')) || '';
+ok(/00302748/.test(found) && /page 3/i.test(found) && /tap ‹/.test(found),
+  'and says which page, and where to look for the drawing', found.slice(0, 140));
+const drawn = await page.evaluate(() => {
+  const c = document.getElementById('pvcanvas');
+  return !!c && c.width > 300 && c.height > 300;
+});
+ok(drawn, 'the page is drawn in the app, not handed off');
+await page.click('#pvprev');
+await page.waitForTimeout(500);
+ok(/Page 2 of 3/.test(await pos()), 'one tap back is the drawing', await pos());
 const openHref = await page.getAttribute('#bopen', 'href');
-ok(/^blob:/.test(openHref || ''), 'the chapter is fetched and handed over as a file', openHref);
+ok(/^blob:/.test(openHref || ''), 'Open and Save are still there as a way out', openHref);
+/* a chapter opened from the contents list, with no part, starts at the start */
+await tap({ 'data-bfile': 'sp/16.pdf', 'data-book': 'tm-ranger-dx800-t4-47047' });
+await page.waitForFunction(() => /Page 1 of 3/.test((document.getElementById('pvpos') || {}).textContent || ''),
+  null, { timeout: 20000 }).catch(() => {});
+ok(/Page 1 of 3/.test(await pos()), 'a chapter opened from its list starts on page 1', await pos());
 const leaks = await page.evaluate(() => [...document.querySelectorAll('a[href]')]
   .filter(a => /firebasestorage|token=/.test(a.href)).length);
 ok(leaks === 0, 'no shareable storage link is ever put on the page');

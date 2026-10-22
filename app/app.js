@@ -526,8 +526,8 @@ async function bookView(arg) {
 }
 
 async function bookFile(arg) {
-  const [id, rel, mid] = String(arg || '').split('|');
-  chrome('Parts book', rel);
+  const [id, rel, mid, part] = String(arg || '').split('|');
+  chrome('Parts book', part ? 'Part ' + part : rel);
   $('view').innerHTML = '<div class="wrap"><div class="empty">Fetching ' + esc(rel)
     + '… the first time takes a moment, then it is kept on this device.</div></div>';
   try {
@@ -539,7 +539,8 @@ async function bookFile(arg) {
     if (fileUrl) URL.revokeObjectURL(fileUrl);
     fileUrl = URL.createObjectURL(b);
     const name = entry.title + ' - ' + rel.replace(/\//g, ' ');
-    bstore.drawFile($('view'), name, fileUrl, b.size, { banner: await judgementBanner(mid) });
+    await bstore.openPdf($('view'), b, fileUrl,
+      { name, part, banner: await judgementBanner(mid) });
   } catch (e) { $('view').innerHTML = oops(e, 'fetch it'); }
 }
 
@@ -1167,7 +1168,8 @@ document.addEventListener('click', async (e) => {
   if (bOpen) { go('book', bOpen.dataset.openbook + '|' + (bOpen.dataset.for || '')); return; }
   const bFile = e.target.closest('[data-bfile]');
   if (bFile) {
-    go('bfile', bFile.dataset.book + '|' + bFile.dataset.bfile + '|' + ((BOOK && BOOK.mid) || ''));
+    go('bfile', bFile.dataset.book + '|' + bFile.dataset.bfile + '|' + ((BOOK && BOOK.mid) || '')
+      + '|' + (bFile.dataset.part || ''));
     return;
   }
 

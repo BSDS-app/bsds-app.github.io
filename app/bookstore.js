@@ -187,7 +187,7 @@ export function drawHits(host, rows, entry, m) {
     const ch = String(r[2] || '').padStart(2, '0');
     const p = have[ch];
     h.push('<', p ? 'button' : 'div', ' class="row"', p ? ' data-bfile="' + esc(p) + '" data-book="'
-      + esc(entry.id) + '"' : '', '><span><span class="nm">', esc(r[0]), ' — ', esc(r[1]),
+      + esc(entry.id) + '" data-part="' + esc(r[0]) + '"' : '', '><span><span class="nm">', esc(r[0]), ' — ', esc(r[1]),
       '</span><span class="sub">', esc(r[4] || ''), r[5] ? ' · qty ' + esc(r[5]) : '',
       r[6] ? ' · item ' + esc(r[6]) : '', '</span></span><span class="ct">',
       p ? 'Ch ' + esc(ch) + (r[7] ? ' p.' + esc(r[7]) : '') : 'no chapter',
@@ -197,22 +197,162 @@ export function drawHits(host, rows, entry, m) {
   host.innerHTML = h.join('');
 }
 
-/* A PDF, fetched and ready. The open is a real link the person taps, because
-   a browser will not open a new tab on its own after a download - and on an
-   iPhone the Save link is what hands it to the built-in viewer. */
-export function drawFile(host, name, url, size, ctx) {
-  const o = ctx || {};
-  const wide = window.matchMedia && window.matchMedia('(min-width: 900px)').matches;
+/* ---------- the page viewer --------------------------------------------- */
+
+/* A chapter is shown IN the app, page by page, because a phone's own PDF
+   viewer always opens on page 1 - the contents - and ignores any "go to page"
+   it is handed. Searched from a part number, it opens on the page that part
+   is printed on, with the number marked, and the drawing is a flick away.
+
+   pdf.js comes from jsDelivr, pinned, in its "legacy" build so an older
+   iPhone can run it. If it cannot load - no signal, an old browser - the
+   Open and Save links are already on the screen and still work. */
+const PDFJS = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/';
+let pdfjsP = null;
+function pdfjs() {
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (!pdfjsP) {
+    pdfjsP = new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = PDFJS + 'legacy/build/pdf.min.js';
+      s.onload = () => {
+        const L = window.pdfjsLib;
+        if (!L) { rej(new Error('no viewer')); return; }
+        L.GlobalWorkerOptions.workerSrc = PDFJS + 'legacy/build/pdf.worker.min.js';
+        res(L);
+      };
+      s.onerror = () => { pdfjsP = null; rej(new Error('The page viewer did not load.')); };
+      document.head.appendChild(s);
+    });
+  }
+  return pdfjsP;
+}
+
+let VIEW = 0;               /* bumped on every open, so a stale search stops */
+
+export async function openPdf(host, blob, url, opts) {
+  const o = opts || {};
+  const me = ++VIEW;
+  const part = String(o.part || '').trim();
+  const pk = key(part);
   host.innerHTML = ['<div class="wrap">', o.banner || '',
-    '<div class="panel"><p class="hint">', esc(name), ' · ', mb(size), ' · on this device now</p>',
+    '<div class="pdfbar">',
+    '<button type="button" class="pvbtn" id="pvprev" aria-label="Previous page" disabled>‹</button>',
+    '<span id="pvpos">Loading…</span>',
+    '<button type="button" class="pvbtn" id="pvnext" aria-label="Next page" disabled>›</button>',
+    '</div>',
+    '<p class="hint" id="pvmsg">', part ? 'Looking for ' + esc(part) + '…' : '', '</p>',
+    '<div class="pdfpage" id="pvpage"><canvas id="pvcanvas"></canvas></div>',
+    '<p class="hint">', esc(o.name || ''), ' · ', mb(blob.size),
+    ' · kept on this device. Pinch to zoom.</p>',
     '<div class="tiles">',
-    '<a class="tile blue" href="', url, '" target="_blank" rel="noopener" id="bopen">',
-    icon('book'), '<span class="tx"><b>Open</b><span>In the phone’s own viewer</span></span></a>',
-    '<a class="tile muted" href="', url, '" download="', esc(name), '">',
+    '<a class="tile muted" href="', url, '" target="_blank" rel="noopener" id="bopen">',
+    icon('book'), '<span class="tx"><b>Open</b><span>In the phone’s own viewer (starts at page 1)</span></span></a>',
+    '<a class="tile muted" href="', url, '" download="', esc(o.name || 'book.pdf'), '">',
     icon('out'), '<span class="tx"><b>Save</b><span>Keep a copy on this device</span></span></a>',
-    '</div></div>',
-    wide ? '<div class="pdfview"><iframe src="' + url + '" title="' + esc(name) + '"></iframe></div>' : '',
-    '</div>'].join('');
+    '</div></div>'].join('');
+
+  const $ = id => host.querySelector('#' + id);
+  const msg = t => { const m = $('pvmsg'); if (m) m.innerHTML = t; };
+  let doc;
+  try {
+    const L = await pdfjs();
+    doc = await L.getDocument({ data: new Uint8Array(await blob.arrayBuffer()),
+      standardFontDataUrl: PDFJS + 'standard_fonts/' }).promise;
+  } catch (e) {
+    if (me === VIEW) {
+      $('pvpos').textContent = '';
+      msg('<b>Could not show the pages here.</b> Use Open or Save below'
+        + (part ? ', and look for ' + esc(part) + ' in it.' : '.'));
+    }
+    return;
+  }
+  if (me !== VIEW) return;
+
+  const n = doc.numPages;
+  let cur = 1;
+  let task = null;
+  const hits = [];
+
+  async function render(i) {
+    cur = Math.max(1, Math.min(n, i));
+    $('pvpos').textContent = 'Page ' + cur + ' of ' + n;
+    $('pvprev').disabled = cur <= 1;
+    $('pvnext').disabled = cur >= n;
+    const page = await doc.getPage(cur);
+    if (me !== VIEW) return;
+    const box = $('pvpage');
+    const cv = $('pvcanvas');
+    const cssW = Math.max(280, box.clientWidth || 360);
+    const base = page.getViewport({ scale: 1 });
+    /* drawn sharper than the screen, so a pinch-zoom on a drawing still
+       reads - capped, because a phone has only so much memory */
+    const px = Math.min(3, Math.max(2, (window.devicePixelRatio || 1) * 1.5), 3200 / cssW);
+    const vp = page.getViewport({ scale: (cssW / base.width) * px });
+    if (task) { try { task.cancel(); } catch (e) {} }
+    cv.width = Math.floor(vp.width);
+    cv.height = Math.floor(vp.height);
+    cv.style.width = cssW + 'px';
+    cv.style.height = Math.floor(vp.height / px) + 'px';
+    const g = cv.getContext('2d');
+    task = page.render({ canvasContext: g, viewport: vp });
+    try { await task.promise; } catch (e) { return; }   /* cancelled by a newer page */
+    if (!pk || me !== VIEW) return;
+    /* mark the part number where it is printed */
+    const tc = await page.getTextContent();
+    g.save();
+    g.fillStyle = 'rgba(232,100,28,.28)';
+    g.strokeStyle = '#e8641c';
+    g.lineWidth = Math.max(2, px * 1.5);
+    tc.items.forEach(it => {
+      if (key(it.str).indexOf(pk) < 0) return;
+      const t = it.transform;
+      const h = it.height || Math.hypot(t[2], t[3]) || 10;
+      /* the text box runs from just under the baseline to the cap height */
+      const r = vp.convertToViewportRectangle([t[4], t[5] - h * 0.22, t[4] + it.width, t[5] + h * 0.78]);
+      const x = Math.min(r[0], r[2]) - 3 * px, y = Math.min(r[1], r[3]) - 1.5 * px;
+      const w = Math.abs(r[2] - r[0]) + 6 * px, hh = Math.abs(r[3] - r[1]) + 3 * px;
+      g.fillRect(x, y, w, hh);
+      g.strokeRect(x, y, w, hh);
+    });
+    g.restore();
+  }
+
+  $('pvprev').onclick = () => render(cur - 1);
+  $('pvnext').onclick = () => render(cur + 1);
+
+  if (!pk) { msg(''); await render(1); return; }
+
+  /* Find the part. The first page it is on is drawn straight away; the rest
+     of the chapter is still searched so the other places it appears can be
+     listed - a part is often on the parts list AND a kit. */
+  let first = true;
+  for (let i = 1; i <= n; i++) {
+    if (me !== VIEW) return;
+    if (first && i % 5 === 1) msg('Looking for ' + esc(part) + '… page ' + i + ' of ' + n);
+    let txt = '';
+    try { txt = (await (await doc.getPage(i)).getTextContent()).items.map(x => x.str).join(' '); }
+    catch (e) { continue; }
+    if (key(txt).indexOf(pk) < 0) continue;
+    hits.push(i);
+    if (first) { first = false; await render(i); }
+    showHits();
+  }
+  if (me !== VIEW) return;
+  if (!hits.length) {
+    msg('<b>' + esc(part) + ' is not printed in this chapter.</b> The index may point at a '
+      + 'kit or an assembly that lists it differently — check the contents page.');
+    await render(1);
+  } else showHits(true);
+
+  function showHits(done) {
+    const others = hits.filter(h => h !== cur);
+    msg('<b>' + esc(part) + '</b> is on page ' + hits.map(h => h === cur ? '<b>' + h + '</b>'
+      : '<button type="button" class="pvjump" data-pg="' + h + '">' + h + '</button>').join(', ')
+      + (done ? '' : ' (still looking…)')
+      + '. If the drawing is not on this page, it is on the one before — tap ‹.');
+    host.querySelectorAll('.pvjump').forEach(b => { b.onclick = () => { render(+b.dataset.pg); showHits(done); }; });
+  }
 }
 
 /* A converted Epiroc book: a whole page with its own scripts. It is shown in

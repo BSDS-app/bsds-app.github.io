@@ -380,7 +380,16 @@ and, for 12 of the 14, a **part search** (the DX800 S5 68792 and DI650
 82517 CDs carry no part index): type a number or words off the
 drawing and it says which chapter (and on the older CDs, which page) to open.
 A chapter is fetched once and then kept on that phone, so the second open on
-the deck does not need signal. Signing out clears what was kept.
+the deck does not need signal.
+
+**A chapter is shown inside the app**, not handed to the phone's PDF viewer,
+because a phone's viewer always opens on page 1 — the contents — and ignores
+any "go to page". Opened from a part search, it searches the chapter's text,
+opens on the page the number is printed on, marks it in orange, and lists the
+other pages it appears on. Big ‹ › buttons turn the page; the drawing is on
+the same page as the list in newer books and the page before in older ones.
+Open and Save are still underneath as a way out. `test/real-book.check.mjs`
+runs this against a real staged chapter and saves a phone-sized screenshot. Signing out clears what was kept.
 
 The Epiroc books open inside the app as well, in a **sealed frame**: their
 own scripts run, but they cannot touch the app's sign-in or database. The

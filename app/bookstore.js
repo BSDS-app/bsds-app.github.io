@@ -29,7 +29,60 @@ export const key = s => String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0
 /* In the preview there is no bucket; the test harness stands one in here. */
 const DEMO_BASE = './books-demo/';
 const CACHE = 'bsds-books';
-const KEEP = 40;               /* files kept on a device before the oldest go */
+/* What a phone keeps is capped by SIZE, not by count: 300 MB, and the book
+   opened longest ago goes first. A single file bigger than 120 MB is shown
+   but not kept - one of those would push out everything else. The sizes and
+   last-opened times live in a small list beside the cache (CIDX), because
+   the cache itself cannot say when something was last used. */
+export const CAP = 300 * 1048576;
+const MAXONE = 120 * 1048576;
+const CIDX = 'bsds.bookCache';
+
+function cidx() { try { return JSON.parse(localStorage.getItem(CIDX) || '{}') || {}; } catch (e) { return {}; } }
+function keepCidx(x) { try { localStorage.setItem(CIDX, JSON.stringify(x)); } catch (e) {} }
+
+/* How much this phone is holding, by the list. */
+export function kept() {
+  const x = cidx();
+  return Object.keys(x).reduce((s, k) => s + (x[k].b || 0), 0);
+}
+export async function clearKept() {
+  try { if (self.caches) await caches.delete(CACHE); } catch (e) {}
+  try { localStorage.removeItem(CIDX); } catch (e) {}
+}
+
+export async function cacheGet(c, ck) {
+  const hit = await c.match(ck);
+  if (!hit) return null;
+  const x = cidx();
+  if (x[ck]) { x[ck].t = Date.now(); keepCidx(x); }
+  return hit.blob();
+}
+
+/* `lim` is only for the test, which cannot fill a phone with 300 MB to prove
+   the cap; the app always uses CAP and MAXONE. */
+export async function cachePut(c, ck, blob, type, lim) {
+  const cap = (lim && lim.cap) || CAP;
+  if (blob.size > ((lim && lim.maxOne) || MAXONE)) return;
+  const x = cidx();
+  /* an older copy of this same file (it was re-uploaded) goes first */
+  const base = ck.split('?')[0];
+  for (const k of Object.keys(x)) {
+    if (k.split('?')[0] === base && k !== ck) { await c.delete(k); delete x[k]; }
+  }
+  /* then the least recently opened, until the new one fits under the cap */
+  let total = Object.keys(x).reduce((s, k) => s + (x[k].b || 0), 0);
+  const oldest = Object.keys(x).sort((a, b) => (x[a].t || 0) - (x[b].t || 0));
+  while (total + blob.size > cap && oldest.length) {
+    const k = oldest.shift();
+    await c.delete(k);
+    total -= x[k].b || 0;
+    delete x[k];
+  }
+  await c.put(ck, new Response(blob, { headers: { 'content-type': type || '' } }));
+  x[ck] = { b: blob.size, t: Date.now() };
+  keepCidx(x);
+}
 
 let LIST = null;
 
@@ -83,21 +136,13 @@ async function fromBucket(p) {
   let c = null;
   try { c = self.caches ? await caches.open(CACHE) : null; } catch (e) { c = null; }
   if (c) {
-    const hit = await c.match(ck);
-    if (hit) return hit.blob();
+    try { const hit = await cacheGet(c, ck); if (hit) return hit; } catch (e) { /* fetch it */ }
   }
   let b;
   try { b = await m.getBlob(ref); } catch (e) { throw friendly(e); }
   if (c) {
-    try {
-      /* drop older copies of this same file, then the oldest of the rest */
-      const keys = await c.keys();
-      const base = ck.split('?')[0];
-      await Promise.all(keys.filter(r => r.url.split('?')[0] === base).map(r => c.delete(r)));
-      const rest = (await c.keys());
-      for (let i = 0; i <= rest.length - KEEP; i++) await c.delete(rest[i]);
-      await c.put(ck, new Response(b, { headers: { 'content-type': meta.contentType || b.type || '' } }));
-    } catch (e) { /* a full or blocked cache only costs a re-download */ }
+    try { await cachePut(c, ck, b, meta.contentType || b.type); }
+    catch (e) { /* a full or blocked cache only costs a re-download */ }
   }
   return b;
 }

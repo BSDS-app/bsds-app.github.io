@@ -261,15 +261,20 @@ export async function receiveOrder(id) {
       { status: 'received', receivedAt: m.serverTimestamp() })));
 }
 
+/* Called off - by whoever asked, or by the office - while it is still open.
+   It is marked, not deleted: the record of what was asked for and dropped is
+   worth keeping, and nothing else in the app deletes either. Once it is on an
+   order it is part of what was bought, and only the office can unwind that. */
 export async function cancelRequest(id) {
   const u = auth.currentUser();
+  const stamp = { status: 'cancelled', cancelledBy: u.name || '' };
   if (u.demo) {
     localPut(K_REQ, localAll(K_REQ).map(r => r.id === id
-      ? { ...r, status: 'cancelled' } : r));
+      ? { ...r, ...stamp, cancelledAt: new Date().toISOString() } : r));
     return;
   }
   const { d, m } = await auth.db();
-  await m.updateDoc(m.doc(d, 'partsRequests', id), { status: 'cancelled' });
+  await m.updateDoc(m.doc(d, 'partsRequests', id), { ...stamp, cancelledAt: m.serverTimestamp() });
 }
 
 /* ---------- the request form ------------------------------------------ */
@@ -328,7 +333,8 @@ export function drawForm(host, ctx) {
     if (pre.unit) host.querySelector('#p_unit').value = pre.unit;
     host.querySelector('.lede').insertAdjacentHTML('afterend', '<div class="note"><b>From the parts book.</b> '
       + pre.lines.length + ' part' + (pre.lines.length === 1 ? '' : 's') + ' filled in below. '
-      + 'Check the machine and the quantities, then send.</div>');
+      + 'Check the machine and the quantities, then send. Not needed after all? '
+      + '<button type="button" class="mini" id="pbclear">Throw this list away</button></div>');
   } else {
     addLine(host);
     addLine(host);
@@ -573,9 +579,14 @@ export function drawRequest(host, r, opts) {
       r.orderId ? ' <button class="mini" data-pord="' + esc(r.orderId)
         + '">Open the order</button>' : '', '</div>');
   }
-  if (o.canOrder && r.status === 'open') {
+  if (r.status === 'cancelled') {
+    h.push('<div class="note"><b>Cancelled</b>', r.cancelledBy ? ' by ' + esc(r.cancelledBy) : '',
+      '. Nobody will order it. It stays here as a record of what was asked for.</div>');
+  }
+  /* whoever asked can call it off, as can the office - until it is bought */
+  if ((o.canOrder || o.mine) && r.status === 'open') {
     h.push('<div class="bar">',
-      '<button class="mini" data-cancelreq="', esc(r.id), '">Cancel this request</button>',
+      '<button class="mini" data-cancelreq="', esc(r.id), '">Cancel this request — not needed</button>',
       '</div>');
   }
   h.push('</div>');

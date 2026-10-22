@@ -185,12 +185,20 @@ service cloud.firestore {
          started being part of the record of what was bought, so it stops
          being his to change - and he was never able to move it along the
          statuses himself. */
+      /* He may also call it off while it is still open - and that is the
+         ONE status he can set, touching nothing but the status and who and
+         when. Cancelled is not deleted: the request stays on record. */
       allow update: if isOwner() || isOffice()
                     || (isTech() && mine(resource.data)
                         && resource.data.status == 'open'
                         && request.resource.data.status == resource.data.status
                         && request.resource.data.orderId == resource.data.orderId
-                        && request.resource.data.uid == resource.data.uid);
+                        && request.resource.data.uid == resource.data.uid)
+                    || (isTech() && mine(resource.data)
+                        && resource.data.status == 'open'
+                        && request.resource.data.status == 'cancelled'
+                        && request.resource.data.diff(resource.data).affectedKeys()
+                             .hasOnly(['status', 'cancelledBy', 'cancelledAt']));
       allow delete: if isOwner();
     }
     match /partsOrders/{id} {

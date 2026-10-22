@@ -110,6 +110,7 @@ export async function sendReset(email) {
    should not still be carrying the last person's downloaded manuals. */
 async function forgetBooks() {
   try { if (self.caches) await caches.delete('bsds-books'); } catch (e) { /* nothing cached */ }
+  try { localStorage.removeItem('bsds.bookCache'); } catch (e) { /* the list of what was kept */ }
 }
 
 export async function signOut() {

@@ -224,6 +224,37 @@ const none = await page.evaluate(async () => {
 });
 ok(none === '', 'a serial match carries no warning — it is the real book', none);
 
+/* ---- what a phone keeps: capped by size, oldest-opened goes first ------- */
+const kept = await page.evaluate(async () => {
+  const s = await import('./bookstore.js');
+  await s.clearKept();
+  const c = await caches.open('bsds-books');
+  const lim = { cap: 1000, maxOne: 600 };
+  const blob = n => new Blob([new Uint8Array(n)]);
+  const has = async k => !!(await c.match(k));
+  const u = n => 'https://books.bsds.local/books/x/' + n + '?g=1';
+  await s.cachePut(c, u('a'), blob(400), '', lim);
+  await new Promise(r => setTimeout(r, 5));
+  await s.cachePut(c, u('b'), blob(400), '', lim);
+  await new Promise(r => setTimeout(r, 5));
+  await s.cacheGet(c, u('a'));                       /* a opened again: now b is the oldest */
+  await new Promise(r => setTimeout(r, 5));
+  await s.cachePut(c, u('c'), blob(400), '', lim);   /* over 1000: something must go */
+  const afterCap = { a: await has(u('a')), b: await has(u('b')), c: await has(u('c')), used: s.kept() };
+  await s.cachePut(c, u('huge'), blob(700), '', lim);
+  const huge = await has(u('huge'));
+  await s.cachePut(c, 'https://books.bsds.local/books/x/a?g=2', blob(100), '', lim);
+  const regen = { old: await has(u('a')), fresh: await has('https://books.bsds.local/books/x/a?g=2') };
+  await s.clearKept();
+  return { afterCap, huge, regen, cleared: s.kept() };
+});
+ok(kept.afterCap.a && kept.afterCap.c && !kept.afterCap.b,
+  'THE POINT: over the cap, the book opened longest ago goes - not the one just used', JSON.stringify(kept.afterCap));
+ok(kept.afterCap.used <= 1000, 'and what is kept stays under the cap', String(kept.afterCap.used));
+ok(!kept.huge, 'a file too big to keep is shown but not kept');
+ok(!kept.regen.old && kept.regen.fresh, 'a re-uploaded file replaces its old copy rather than sitting beside it');
+ok(kept.cleared === 0, 'Clear gives all the space back');
+
 /* ---- books in storage -------------------------------------------------
    books.stored.json is the real one the stage script wrote. */
 const stored = JSON.parse(fs.readFileSync(path.join(ROOT, 'books.stored.json'), 'utf8')).books;
@@ -461,6 +492,45 @@ const shelfMatch = await page.evaluate(async () => {
   return s.bySerial('').length + s.list().filter(b => b.shelf && b.serial).length;
 });
 ok(shelfMatch === 0, 'no manual carries a serial a machine could match');
+
+/* the library screen says what this phone is holding, and can give it back */
+await tap({ 'data-go': 'books' });
+await page.waitForTimeout(400);
+const keptNote = await page.textContent('#keptnote').catch(() => '');
+ok(/Books on this phone: .*of 300 MB/.test(keptNote), 'the library says how much this phone is keeping',
+  keptNote.slice(0, 80));
+
+/* ---- a tech calls off a parts request he does not need ----------------- */
+await page.click('#signout');
+await page.waitForTimeout(300);
+await page.click('[data-demo="demo-clint"]');
+await page.waitForTimeout(300);
+await page.evaluate(() => sessionStorage.removeItem('bsds.partsBasket'));
+await tap({ 'data-go': 'parts' });
+await page.click('.urg .res');
+await page.fill('#p_unit', 'DR617');
+await page.fill('#partlines .partrow [data-col="pn"]', '00302748');
+await page.fill('#partlines .partrow [data-col="qty"]', '1');
+await page.click('#psend');
+await page.waitForTimeout(800);
+ok(!!(await page.$('[data-cancelreq]')), 'THE POINT: whoever asked can cancel his own open request');
+page.once('dialog', d => d.accept());
+await page.click('[data-cancelreq]');
+await page.waitForTimeout(800);
+const after = await page.textContent('#view');
+ok(/Cancelled/.test(after) && /by Clint/.test(after), 'it is marked cancelled, and by whom', after.slice(0, 120));
+ok(!(await page.$('[data-cancelreq]')), 'and cannot be cancelled twice');
+
+/* a list picked from a book can be thrown away without sending it */
+await page.evaluate(async () => {
+  const s = await import('./bookstore.js');
+  s.basketAdd([{ pn: 'X1', qty: 1, desc: 'not wanted' }], 'DR617');
+});
+await tap({ 'data-go': 'parts' });
+ok(!!(await page.$('#pbclear')), 'a list from a book can be thrown away');
+await page.click('#pbclear');
+await page.waitForTimeout(300);
+ok(await page.evaluate(() => !sessionStorage.getItem('bsds.partsBasket')), 'and it is gone');
 
 const real = errs.filter(e => !/ERR_TUNNEL|fonts\.googleapis|favicon/.test(e));
 ok(real.length === 0, 'no script errors', real.slice(0, 2).join(' | '));

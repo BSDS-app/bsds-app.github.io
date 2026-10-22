@@ -9,13 +9,34 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { run, parseIndex, chapterTitles, slug, inlineFigures } from '../tools/stage_books.mjs';
+import { run, parseIndex, chapterTitles, slug, inlineFigures, chunksFor } from '../tools/stage_books.mjs';
 
 let pass = 0, fail = 0;
 const bad = [];
 const ok = (c, what, extra) => {
   if (c) pass++; else { fail++; bad.push(what + (extra ? ' :: ' + extra : '')); }
 };
+
+/* a real, tiny PDF: one line of text per page */
+function makePdf(pages) {
+  const objs = ['<< /Type /Catalog /Pages 2 0 R >>',
+    `<< /Type /Pages /Kids [${pages.map((_, i) => `${3 + i * 2} 0 R`).join(' ')}] /Count ${pages.length} >>`];
+  const font = 3 + pages.length * 2;
+  pages.forEach(txt => {
+    const c = `BT /F1 18 Tf 72 700 Td (${txt}) Tj ET`;
+    objs.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${font} 0 R >> >> /Contents ${objs.length + 2} 0 R >>`);
+    objs.push(`<< /Length ${c.length} >>\nstream\n${c}\nendstream`);
+  });
+  objs.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+  let out = '%PDF-1.4\n';
+  const at = [];
+  objs.forEach((o, i) => { at.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const x = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`
+    + at.map(n => String(n).padStart(10, '0') + ' 00000 n \n').join('')
+    + `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${x}\n%%EOF`;
+  return out;
+}
 
 const T = fs.mkdtempSync(path.join(os.tmpdir(), 'bsds-stage-'));
 const put = (p, body) => { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, body); };
@@ -108,7 +129,7 @@ put(path.join(BOOKS, 'epiroc', 'd65', 'index.html'), '<p>self contained</p>');
 put(path.join(BOOKS, 'shelves', 'which-manual', 'index.html'), '<p>which manual</p>');
 
 const lines = [];
-const out = run([], { booksDir: BOOKS, repo: REPO, log: s => lines.push(s) });
+const out = await run([], { booksDir: BOOKS, repo: REPO, log: s => lines.push(s) });
 const S = out.stage;
 const has = p => fs.existsSync(path.join(S, ...p.split('/')));
 
@@ -147,7 +168,7 @@ ok(man.sections.find(s => s.key === 'info').files.some(f => f.p === 'home.pdf'),
 
 /* a copy left from an earlier run, now held elsewhere, is cleared out */
 put(path.join(S, 'tm-ranger-dx800-t4-47047', 'files', 'cat', 'PM engine.pdf'), 'SAME ENGINE MANUAL');
-run([], { booksDir: BOOKS, repo: REPO, log: () => {} });
+await run([], { booksDir: BOOKS, repo: REPO, log: () => {} });
 ok(!has('tm-ranger-dx800-t4-47047/files/cat/PM engine.pdf'), 'a stale duplicate is removed on the next run');
 ok(fs.existsSync(path.join(S, '.hashes.json')), 'fingerprints are remembered, so a re-run does not re-read everything');
 
@@ -177,17 +198,61 @@ ok(has('shelf-which-manual/book.html'), 'its page is staged');
 ok(!JSON.stringify(stored).includes(LIB.replace(/\\/g, '\\\\')), 'no workstation paths leak into the public list');
 
 /* ---- adding one later -------------------------------------------------- */
-run(['--add', 'Pantera DP1500i T4 39376'], { booksDir: BOOKS, repo: REPO, log: () => {} });
+await run(['--add', 'Pantera DP1500i T4 39376'], { booksDir: BOOKS, repo: REPO, log: () => {} });
 const stored2 = JSON.parse(fs.readFileSync(path.join(REPO, 'books.stored.json'), 'utf8'));
 ok(stored2.books.some(b => b.id === 'tm-pantera-dp1500i-t4-39376'), '--add puts up a named book');
-run([], { booksDir: BOOKS, repo: REPO, log: () => {} });
+await run([], { booksDir: BOOKS, repo: REPO, log: () => {} });
 const stored3 = JSON.parse(fs.readFileSync(path.join(REPO, 'books.stored.json'), 'utf8'));
 ok(stored3.books.some(b => b.id === 'tm-pantera-dp1500i-t4-39376'),
   'and a later run does not quietly drop it from the app');
 let threw = '';
-try { run(['--add', 'Leopard DI550 S5 6067'], { booksDir: BOOKS, repo: REPO, log: () => {} }); }
+try { await run(['--add', 'Leopard DI550 S5 6067'], { booksDir: BOOKS, repo: REPO, log: () => {} }); }
 catch (e) { threw = e.message; }
 ok(/Not in the library index/.test(threw), 'a misspelt --add is refused, not guessed at', threw);
+
+/* ---- one huge parts file, cut into chapters ---------------------------- */
+/* shaped like the DI650 82517: contents, then numbered chapters, CARRIER
+   500-odd pages long with sub-assembly bookmarks every 10 pages */
+const di = [
+  { title: '1 LEOPARD DI650I', page: 21, kids: [] },
+  { title: '2 MAINTENANCE KITS', page: 31, kids: [] },
+  { title: '9 CARRIER', page: 591, kids: Array.from({ length: 52 }, (_, i) => ({ page: 591 + i * 10 })) },
+  { title: '10 TRACK MODULE', page: 1109, kids: [] },
+];
+const cut = chunksFor(di, 1200, 160);
+ok(cut[0].key === '00' && cut[0].from === 1 && cut[0].to === 20, 'the cover and contents are their own piece');
+const carrier = cut.filter(c => c.key.startsWith('09-'));
+ok(carrier.length >= 4 && carrier.every(c => c.to - c.from + 1 <= 160),
+  'THE POINT: a 518-page chapter is cut into pieces a phone can open', JSON.stringify(carrier.map(c => [c.from, c.to])));
+ok(carrier.every(c => di[2].kids.some(k => k.page === c.from)),
+  'and every cut falls where an assembly starts, never mid-drawing');
+let gapless = true;
+cut.forEach((c, i) => { if (i && c.from !== cut[i - 1].to + 1) gapless = false; });
+ok(gapless && cut[cut.length - 1].to === 1200, 'no page is lost or repeated between the pieces');
+ok(cut.find(c => c.key === '10').title === 'TRACK MODULE', 'chapters keep their names');
+const flat = chunksFor([], 400, 160);
+ok(flat.length === 3 && flat[2].from === 321 && flat[2].to === 400, 'a big file with no bookmarks is cut by pages');
+
+/* the real thing, on a small PDF: cut, staged, listed, the original gone */
+{
+  const mupdf = await import('mupdf');
+  put(path.join(B, 'sp', 'parts.pdf'), makePdf(['page 1', 'page 2', 'page 3', 'page 4', 'page 5']));
+  await run([], { booksDir: BOOKS, repo: REPO, log: () => {}, big: 300, maxPages: 2 });
+  const di650 = JSON.parse(fs.readFileSync(path.join(S, 'tm-leopard-di650-82517', 'manifest.json'), 'utf8'));
+  const spf = di650.sections.find(s => s.key === 'sp').files.map(f => f.p);
+  ok(spf.includes('sp/parts-01.pdf') && spf.includes('sp/parts-03.pdf') && !spf.includes('sp/parts.pdf'),
+    'the huge file is listed as its pieces, not as itself', spf.join(' '));
+  ok(spf.includes('sp/03.pdf'), 'and a real chapter file beside it is untouched');
+  ok(!has('tm-leopard-di650-82517/files/sp/parts.pdf'), 'the 285 MB original does not go up');
+  const counts = [];
+  for (const n of ['01', '02', '03']) {
+    const p = mupdf.Document.openDocument(
+      fs.readFileSync(path.join(S, 'tm-leopard-di650-82517', 'files', 'sp', 'parts-' + n + '.pdf')), 'application/pdf');
+    counts.push(p.countPages());
+  }
+  ok(counts.join() === '2,2,1', 'each piece holds its own pages and only those', counts.join());
+  ok(!fs.readdirSync(S).some(n => /^\.split-/.test(n)) === false, 'the cut is remembered, so it is done once');
+}
 
 /* inlineFigures on its own: no fig folder means nothing changes */
 ok(inlineFigures('"fig/p1.webp"', path.join(T, 'nope')).count === 0, 'no fig folder, no change');

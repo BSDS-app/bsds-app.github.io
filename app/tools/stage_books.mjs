@@ -181,6 +181,103 @@ export function planToolman(folder, meta) {
   };
 }
 
+/* ONE HUGE FILE. Most CDs split the parts book into chapters (sp/03.pdf ..).
+   A few (the DI650 82517) ship it as one PDF - 1,958 pages, 285 MB - which a
+   phone cannot open: it has to be downloaded whole and held in memory.
+   Such a file is cut into chapters along its own bookmarks, and a chapter
+   longer than `maxPages` is cut again at its sub-assembly bookmarks, so a
+   tech downloads the part of the book he is in.
+
+   This is the plan only - which pages go in which piece - so it can be
+   tested without a 285 MB file. `chapters` is [{title, page, kids:[{page}]}]. */
+export const BIG = 60 * 1048576;
+export function chunksFor(chapters, numPages, maxPages) {
+  const max = maxPages || 160;
+  const out = [];
+  const cs = (chapters || []).filter(c => c.page >= 1 && c.page <= numPages)
+    .sort((a, b) => a.page - b.page);
+  if (!cs.length) {
+    for (let s = 1, n = 1; s <= numPages; s += max, n++) {
+      out.push({ key: String(n).padStart(2, '0'), title: 'Pages ' + s + '–' + Math.min(numPages, s + max - 1),
+                 from: s, to: Math.min(numPages, s + max - 1) });
+    }
+    return out;
+  }
+  if (cs[0].page > 1) out.push({ key: '00', title: 'Cover and contents', from: 1, to: cs[0].page - 1 });
+  cs.forEach((c, i) => {
+    const end = i + 1 < cs.length ? cs[i + 1].page - 1 : numPages;
+    const m = String(c.title || '').match(/^(\d+)\s+(.*)$/);
+    const key = m ? m[1].padStart(2, '0') : String(i + 1).padStart(2, '0');
+    const name = m ? m[2] : String(c.title || 'Chapter ' + (i + 1));
+    if (end < c.page) return;
+    const cuts = (c.kids || []).map(k => k.page).filter(p => p > c.page && p <= end)
+      .sort((a, b) => a - b).filter((p, j, a) => j === 0 || p !== a[j - 1]);
+    if (end - c.page + 1 <= max || !cuts.length) {
+      out.push({ key, title: name, from: c.page, to: end });
+      return;
+    }
+    const pieces = [];
+    let start = c.page, prev = null;
+    for (const p of cuts) {
+      if (p - start > max) {
+        const at = prev && prev > start ? prev : p;
+        pieces.push([start, at - 1]);
+        start = at;
+      }
+      prev = p;
+    }
+    pieces.push([start, end]);
+    pieces.forEach(([a, b], j) => out.push({
+      key: key + '-' + (j + 1), title: name + ' — part ' + (j + 1) + ' of ' + pieces.length
+        + ' (pages ' + (a - c.page + 1) + '–' + (b - c.page + 1) + ')', from: a, to: b }));
+  });
+  return out;
+}
+
+/* Cut one big PDF into the planned pieces, into `outDir`. Remembered by the
+   source's size and date (`side`), so it is done once, not on every run. */
+async function splitPdf(src, outDir, side, maxPages, prefix) {
+  const st = fs.statSync(src);
+  try {
+    const s = JSON.parse(fs.readFileSync(side, 'utf8'));
+    if (s.size === st.size && s.mtime === Math.round(st.mtimeMs)
+        && s.chunks.every(c => fs.existsSync(path.join(outDir, c.file)))) return s.chunks;
+  } catch (e) { /* not done yet */ }
+  /* MuPDF, not a pure-JS library: the CD exports are big and not always
+     tidy inside (pdf-lib could not find the 82517 book's page list at all),
+     and MuPDF reads what viewers read. Only ever run here, on the workstation. */
+  const mupdf = await import('mupdf');
+  const doc = mupdf.Document.openDocument(fs.readFileSync(src), 'application/pdf');
+  const whole = doc.asPDF();
+  const numPages = doc.countPages();
+  /* outline page numbers are counted from 0 */
+  const pageOf = it => {
+    if (typeof it.page === 'number' && it.page >= 0) return it.page + 1;
+    try { return it.uri ? doc.resolveLink(it.uri) + 1 : 0; } catch (e) { return 0; }
+  };
+  let ol = doc.loadOutline() || [];
+  if (ol.length === 1 && ol[0].down && ol[0].down.length) ol = ol[0].down;   /* one wrapper bookmark */
+  const chapters = ol
+    .filter(it => !/^table of contents$/i.test(String(it.title || '').trim()))
+    .map(it => ({ title: String(it.title || '').trim(), page: pageOf(it),
+                  kids: (it.down || []).map(k => ({ page: pageOf(k) })) }));
+  const plan = chunksFor(chapters, numPages, maxPages);
+  fs.mkdirSync(outDir, { recursive: true });
+  const chunks = [];
+  for (const c of plan) {
+    const part = new mupdf.PDFDocument();
+    const map = part.newGraftMap();
+    for (let p = c.from; p <= c.to; p++) map.graftPage(-1, whole, p - 1);
+    /* named after the file it came from, so it can never land on top of a
+       real chapter file (03.pdf) on a CD that has both */
+    const file = (prefix ? prefix + '-' : '') + c.key + '.pdf';
+    fs.writeFileSync(path.join(outDir, file), part.saveToBuffer('compress=yes,garbage=compact').asUint8Array());
+    chunks.push({ file, key: c.key, title: c.title, from: c.from, to: c.to });
+  }
+  fs.writeFileSync(side, JSON.stringify({ size: st.size, mtime: Math.round(st.mtimeMs), chunks }));
+  return chunks;
+}
+
 /* An Epiroc book page with its drawings folded in. The page asks for
    "fig/p010.webp"; the app shows it in a sealed frame that cannot fetch
    anything relative, so the drawing has to already be in the page. */
@@ -226,7 +323,7 @@ const writeJson = (file, obj) => {
 
 /* ---------- the run ------------------------------------------------------ */
 
-export function run(argv, opts) {
+export async function run(argv, opts) {
   const o = opts || {};
   const log = o.log || console.log;
   const booksDir = o.booksDir || BOOKS;
@@ -268,6 +365,34 @@ export function run(argv, opts) {
     if (!fs.existsSync(src)) { log('MISSING  ' + src + ' (skipped)'); continue; }
     const id = 'tm-' + slug(b.folder);
     plans.push({ id, b, plan: planToolman(src, { id, title: b.folder, lib: b.lib, folder: b.folder, serial: b.serial }) });
+  }
+
+  /* A parts book that came as one huge file is cut into chapters first; the
+     pieces then go through everything below like any other file. */
+  for (const P of plans) {
+    const bigs = P.plan.files.filter(f => /^sp\//i.test(f.rel) && f.size > (o.big || BIG));
+    for (const big of bigs) {
+      const outDir = path.join(stage, P.id, 'files', 'sp');
+      const side = path.join(stage, '.split-' + P.id + '-' + slug(big.rel) + '.json');
+      log(`${P.id}: ${big.rel} is ${(big.size / 1048576).toFixed(0)} MB in one file - cutting it into chapters…`);
+      const chunks = await splitPdf(big.full, outDir, side, o.maxPages,
+        slug(path.basename(big.rel, path.extname(big.rel))));
+      const sp = P.plan.manifest.sections.find(s => s.key === 'sp');
+      sp.files = sp.files.filter(x => x.p !== big.rel);
+      P.plan.files = P.plan.files.filter(x => x !== big);
+      chunks.forEach(c => {
+        const full = path.join(outDir, c.file);
+        const size = fs.statSync(full).size;
+        const rel = 'sp/' + c.file;
+        P.plan.files.push({ full, rel, size });
+        const n = c.key.split('-')[0].replace(/^0(?=\d)/, '');
+        sp.files.push({ p: rel, t: (c.key === '00' ? '' : 'Chapter ' + n + ' — ') + c.title, b: size,
+                        pages: [c.from, c.to] });
+      });
+      sp.files.sort((a, b) => a.p.localeCompare(b.p, 'en', { numeric: true }));
+      const biggest = Math.max(...chunks.map(c => fs.statSync(path.join(outDir, c.file)).size));
+      log(`   ${chunks.length} pieces, the largest ${(biggest / 1048576).toFixed(0)} MB.`);
+    }
   }
 
   /* STORED ONCE. The CDs repeat themselves - the same Cat engine manual,
@@ -386,7 +511,7 @@ function upload(stage) {
      under books/ comes from here, so nothing else is in the way. The
      fingerprint cache stays on this machine. */
   const r = spawnSync('gcloud', ['storage', 'rsync', '"' + stage + '"', dest, '--recursive',
-    '--delete-unmatched-destination-objects', '--exclude', '"^\\.hashes\\.json$"'],
+    '--delete-unmatched-destination-objects', '--exclude', '"^\\."'],
     { stdio: 'inherit', shell: true });
   if (r.status !== 0) {
     console.error('\nThe upload stopped (exit ' + r.status + '). Run the same command again to carry on.');
@@ -397,6 +522,6 @@ function upload(stage) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
-  const { stage } = run(args);
+  const { stage } = await run(args);
   if (args.includes('--upload')) upload(stage);
 }

@@ -398,7 +398,18 @@ and, for 12 of the 14, a **part search** (the DX800 S5 68792 and DI650
 82517 CDs carry no part index): type a number or words off the
 drawing and it says which chapter (and on the older CDs, which page) to open.
 A chapter is fetched once and then kept on that phone, so the second open on
-the deck does not need signal.
+the deck does not need signal. **What a phone keeps is capped at 300 MB**; past
+that, the book opened longest ago goes first, and a single file over 120 MB
+is shown but never kept. The Parts books screen says how much this phone is
+holding and has a **Clear** button. Signing out clears it too.
+
+**One huge file is cut into chapters.** The DI650 82517 CD shipped its whole
+parts book as one PDF — 1,958 pages, 285 MB — which a phone cannot open. The
+stage script cuts any spare-parts file over 60 MB along its own bookmarks,
+and cuts a chapter longer than 160 pages again where an assembly starts. That
+book is now 23 pieces, the largest 36 MB. The cut uses MuPDF (a dev tool on
+the workstation only; pdf-lib could not read that file) and is remembered, so
+it runs once. That CD has no part index, so its book has no part search.
 
 **A chapter is shown inside the app**, not handed to the phone's PDF viewer,
 because a phone's viewer always opens on page 1 — the contents — and ignores
@@ -513,6 +524,10 @@ later makes the part number required.
 **Down is a fact, not a priority.** A rig that is not drilling is a different
 kind of request from a shelf restock, so it sorts first, is counted on its own,
 and nothing else competes with it.
+
+**Not needed after all?** Whoever asked can cancel his own request while it
+is still open — after a confirm, because it is one tap. It is marked
+cancelled, with who and when, not deleted. A tech can set no other status.
 
 Once a request is on an order the tech can no longer edit it — it has stopped
 being a request and started being part of the record of what was bought. That

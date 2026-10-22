@@ -9,7 +9,7 @@ import {
   initializeTestEnvironment, assertFails, assertSucceeds,
 } from '@firebase/rules-unit-testing';
 import {
-  doc, getDoc, setDoc, collection, getDocs, deleteDoc,
+  doc, getDoc, setDoc, collection, getDocs, deleteDoc, updateDoc,
 } from 'firebase/firestore';
 import { HARD_RULES, GRANTS } from '../roles.js';
 
@@ -276,6 +276,31 @@ await ok('but not once it has been ordered', async () => {
 await ok('a tech cannot read another tech\u2019s request', async () => {
   await assertFails(getDocs(collection(as('noah'), 'partsRequests')));
   await assertFails(getDoc(doc(as('noah'), 'partsRequests/q1')));
+});
+/* Calling off a request he no longer needs. */
+await ok('a tech cannot cancel somebody else’s request', async () => {
+  await assertFails(updateDoc(doc(as('noah'), 'partsRequests/q1'),
+    { status: 'cancelled', cancelledBy: 'Noah' }));
+});
+await ok('a tech cannot cancel one that is already on an order', async () => {
+  await assertFails(updateDoc(doc(as('clint'), 'partsRequests/q2'),
+    { status: 'cancelled', cancelledBy: 'Clint' }));
+});
+await ok('cancelling is not a way to change the lines as well', async () => {
+  await assertFails(updateDoc(doc(as('clint'), 'partsRequests/q1'),
+    { status: 'cancelled', cancelledBy: 'Clint', lines: [] }));
+});
+await ok('nor to set any status but cancelled', async () => {
+  await assertFails(updateDoc(doc(as('clint'), 'partsRequests/q1'),
+    { status: 'received', cancelledBy: 'Clint' }));
+});
+await ok('a tech CAN cancel his own request while it is open', async () => {
+  await assertSucceeds(updateDoc(doc(as('clint'), 'partsRequests/q1'),
+    { status: 'cancelled', cancelledBy: 'Clint', cancelledAt: new Date() }));
+  /* put it back for the office scenarios that follow */
+  await env.withSecurityRulesDisabled(async c => {
+    await updateDoc(doc(c.firestore(), 'partsRequests/q1'), { status: 'open' });
+  });
 });
 await ok('office works the queue and the orders', async () => {
   await assertSucceeds(getDocs(collection(as('jaz'), 'partsRequests')));

@@ -533,9 +533,18 @@ async function books() {
       : '<a class="tile teal" href="' + esc(s.url) + '" target="_blank" rel="noopener">'
         + tileFace(s.title, 'Reference', 'book') + '</a>');
   });
-  h.push('</div></div>');
+  h.push('</div>');
+  /* what this phone is holding, and a way to give the space back */
+  const used = bstore.kept();
+  h.push('<div class="note" id="keptnote"><b>Books on this phone: ', fmtMB(used), ' of ',
+    fmtMB(bstore.CAP), '.</b> Chapters you open are kept so they open again without signal; ',
+    'the one opened longest ago goes first when it is full. Signing out clears them.',
+    used ? ' <button type="button" class="mini" id="bclear">Clear them now</button>' : '', '</div>');
+  h.push('</div>');
   $('view').innerHTML = h.join('');
 }
+
+const fmtMB = b => (b < 1048576 && b > 0 ? '<1' : Math.round(b / 1048576)) + ' MB';
 
 /* One book out of storage. The route carries the machine it was opened from,
    if any, so a book chosen by judgement keeps its red banner all the way
@@ -974,7 +983,8 @@ async function partsRequest(id) {
     const r = await parts.getRequest(id);
     if (!r) { $('view').innerHTML = '<div class="wrap"><div class="empty">No such '
       + 'request.</div></div>'; return; }
-    parts.drawRequest($('view'), r, { canOrder: auth.allow('parts.order') });
+    parts.drawRequest($('view'), r, { canOrder: auth.allow('parts.order'),
+      mine: !!(auth.currentUser() && r.uid === auth.currentUser().uid) });
   } catch (e) { $('view').innerHTML = oops(e, 'open it'); }
 }
 
@@ -1236,6 +1246,18 @@ document.addEventListener('click', async (e) => {
   /* ---- parts books ---- */
   const bFor = e.target.closest('[data-bookfor]');
   if (bFor) { go('bookfor', bFor.dataset.bookfor); return; }
+  if (e.target.id === 'bclear') {
+    if (!window.confirm('Clear the books kept on this phone?\n\nThey download again the next time '
+      + 'somebody opens them.')) return;
+    await bstore.clearKept();
+    books();
+    return;
+  }
+  if (e.target.id === 'pbclear') {
+    bstore.basketClear();
+    partsForm();
+    return;
+  }
   if (e.target.id === 'pgsend' && BOOK) {
     const btn = e.target;
     btn.disabled = true;
@@ -1545,6 +1567,9 @@ document.addEventListener('click', async (e) => {
   }
   const cxl = e.target.closest('[data-cancelreq]');
   if (cxl) {
+    /* a gloved thumb should not be able to call off a rig's parts by accident */
+    if (!window.confirm('Cancel this parts request?\n\nNobody will order it. '
+      + 'It stays on record, marked cancelled.')) return;
     cxl.disabled = true;
     try { await parts.cancelRequest(cxl.dataset.cancelreq); partsRequest(cxl.dataset.cancelreq); }
     catch (err) { cxl.disabled = false; alertish(err); }

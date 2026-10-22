@@ -12,6 +12,7 @@ import * as jsa from './jsa.js';
 import * as team from './people.js';
 import * as push from './push.js';
 import * as receipt from './receipts.js';
+import * as book from './books.js';
 import * as fleet from './fleet.js';
 import * as parts from './parts.js';
 import * as alerts from './alerts.js';
@@ -426,6 +427,33 @@ function cell(label, v) {
     + (empty ? 'not on file' : esc(v)) + '</b><span>' + esc(label) + '</span></div>';
 }
 
+/* ---------- parts books ------------------------------------------------ */
+/* A book belongs to a serial. The coverage screen is the honest answer to
+   "which of our machines can we actually look up" - and it is blunt about
+   the ones that cannot, because the alternative is somebody guessing. */
+let bookPicks = {};
+
+async function bookCoverage() {
+  chrome('Parts books', 'By machine');
+  $('view').innerHTML = loading;
+  try {
+    await book.load();
+    bookPicks = await book.picks();
+    book.drawCoverage($('view'), book.coverage(bookPicks), {});
+  } catch (e) { $('view').innerHTML = oops(e, 'read the book index'); }
+}
+
+async function machineBook(machineId) {
+  chrome('Parts book', 'For this machine');
+  $('view').innerHTML = loading;
+  try {
+    await book.load();
+    if (!Object.keys(bookPicks).length) bookPicks = await book.picks();
+    const view = book.forMachine(machineId, bookPicks);
+    book.drawForMachine($('view'), view, { canChoose: auth.allow('equipment.edit') });
+  } catch (e) { $('view').innerHTML = oops(e, 'open it'); }
+}
+
 function books() {
   chrome('Parts books', 'Library');
   const h = ['<div class="wrap"><h1 class="pg">Parts books</h1>',
@@ -435,7 +463,11 @@ function books() {
   CONFIG.books.forEach(b => h.push('<a class="tile blue" href="', esc(b.url),
     '" target="_blank" rel="noopener">',
     tileFace(b.title, b.serial ? 's/n ' + b.serial : 'no serial', 'book'), '</a>'));
-  h.push('</div><h2 class="sec">Schematics and manuals</h2><div class="tiles">');
+  h.push('</div><h2 class="sec">Every machine</h2><div class="list">',
+    '<button class="row" data-go="bookcover"><span><span class="nm">Which rigs have a book'
+    + '</span><span class="sub">Matched by serial, chosen by judgement, or nothing yet'
+    + '</span></span><span class="ct">\u203a</span></button></div>',
+    '<h2 class="sec">Schematics and manuals</h2><div class="tiles">');
   CONFIG.shelves.forEach(s => h.push('<a class="tile teal" href="', esc(s.url),
     '" target="_blank" rel="noopener">',
     tileFace(s.title, 'Reference', 'book'), '</a>'));
@@ -972,6 +1004,7 @@ function draw() {
   if (v === 'wolist') { woList(); return; }
   if (v === 'worec') { woRecord(route.arg); return; }
   if (v === 'rrec') { receiptRecord(route.arg); return; }
+  if (v === 'bookfor') { machineBook(route.arg); return; }
   if (v === 'equipment') equipment();
   else if (v === 'customer') customer(route.arg);
   else if (v === 'rig') machine(route.arg);
@@ -981,6 +1014,7 @@ function draw() {
   else if (v === 'notify') { notify(); return; }
   else if (v === 'receipt') { receiptForm(); return; }
   else if (v === 'receiptq') { receiptQueue(); return; }
+  else if (v === 'bookcover') { bookCoverage(); return; }
   else if (v === 'perms') perms();
   else home();
 }
@@ -1019,6 +1053,18 @@ document.addEventListener('change', async (e) => {
 
 document.addEventListener('input', (e) => {
   if (e.target.closest('#r_amount') || e.target.closest('[data-l="amount"]')) syncLines();
+  const bq = e.target.closest('#bq');
+  if (bq) {
+    const host = $('bhits');
+    if (!host) return;
+    const mid = route.arg;
+    const q = String(bq.value || '').trim();
+    /* Nothing typed yet: offer the books for machines that look like this
+       one, which is what somebody reaches for first. */
+    const rows = q ? book.find(q, 40)
+      : book.like((book.forMachine(mid, bookPicks).machine) || {}, 40);
+    book.drawHits(host, rows, mid);
+  }
 });
 
 document.addEventListener('click', async (e) => {
@@ -1028,6 +1074,30 @@ document.addEventListener('click', async (e) => {
   if (tl) { go('tool', tl.dataset.tool); return; }
   const g = e.target.closest('[data-go]');
   if (g) { go(g.dataset.go, null); return; }
+
+  /* ---- parts books ---- */
+  const bFor = e.target.closest('[data-bookfor]');
+  if (bFor) { go('bookfor', bFor.dataset.bookfor); return; }
+
+  const bPick = e.target.closest('[data-pick]');
+  if (bPick) {
+    const folder = bPick.dataset.pick;
+    const mid = bPick.dataset.for;
+    const row = book.library().find(r => r.folder === folder);
+    if (!row) return;
+    /* A judgement pick is a statement about a machine somebody else will
+       trust later, so it asks why. The answer goes on the record and is
+       shown wherever the book is. */
+    const why = window.prompt('Why this book for this machine?\n\n'
+      + 'It will be marked as a judgement everywhere it appears.');
+    if (why === null) return;
+    try {
+      await book.savePick(mid, row, why);
+      bookPicks = await book.picks();
+      machineBook(mid);
+    } catch (err) { alertish(err); }
+    return;
+  }
 
   /* ---- receipts ---- */
   const addLine = e.target.closest('#raddline');

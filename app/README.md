@@ -527,6 +527,57 @@ node tools/stage_books.mjs --add "Leopard DI550 S5 60673" --upload
 
 Then push `books.stored.json`. Earlier `--add`s are kept on later runs.
 
+### Books with their own drawings
+
+A converted Epiroc book is one self-contained file: `kind: "html"`, fetched
+whole, shown in the sealed frame. The twelve Sandvik books built from the
+Toolman CDs are the same page in a different shape — the parts are read off
+the printed sheets into data, and each assembly's exploded view is a separate
+image. One book is roughly 0.8 MB of page and 100–200 MB of drawings, so
+inlining them the way the Epiroc books inline theirs is not on.
+
+Those books carry `assets: true` in `books.stored.json`. The page asks the
+app for one drawing at a time:
+
+```
+frame  -> { bsds: 'file', id, path: 'draw/p045.png' }
+app    -> fromBucket('books/<id>/draw/p045.png')      // sign-in, device cache
+app    -> { bsds: 'file:ok', id, buf, type }
+frame  -> URL.createObjectURL(...)  ->  <img src>
+```
+
+`serveFile()` in `bookstore.js` is what answers, and it is deliberately
+strict: only a book the stored list marks `assets`, only that book's own
+folder, only `draw/<plain name>`. The frame is sealed but it is still a page
+full of script, and `'books/' + id + '/' + whatever it sent` would otherwise
+let it read any object the signed-in user can.
+
+The same page opened on its own — from the folder, from a zip, from the
+artifact — finds no `window.bsdsFile`, falls back to the relative `draw/`
+path beside it, and works unchanged. One book, both ways.
+
+**Callouts that do nothing are left off.** The reader picks up two things
+that look like balloons and are not: the digits of the part number printed
+in a sheet's title block, and the internals of a sub-assembly the CD sells
+under one order number and never lists. Both are really printed on the
+sheet, so the drawing keeps them — but no invisible button is put over a
+number that has no row behind it. `test/newviewer.check.mjs` holds that
+line: every hotspot on a drawing must mark a row when it is tapped.
+
+**One book per machine.** Twelve of the fourteen Toolman machines now have
+a read book, and `books.stored.json` lists only that one for them — the
+`tm-*` PDF entry for the same serial is gone from the list. 82517 and 68792
+keep theirs: their CDs are the newer PDF-only generation and have not been
+read yet. `forFolder()` prefers the read book where both are listed, so the
+registry's folder name reaches the right one either way and putting a
+`tm-*` entry back is a one-line undo.
+
+**The files are still in the bucket.** Unlisting is not deleting. The
+`tm-*` objects — about 4.3 GB — are untouched and nothing here removes
+them; that is a decision for a person, after the read books have been used
+in anger for a while. Until then the bucket holds both, about 6.1 GB, which
+is over the free 5 GB and costs a few cents a month.
+
 ### Cutting somebody off
 
 `active: false` stops them using the app but not a direct Storage fetch —

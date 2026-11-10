@@ -98,9 +98,13 @@ export async function load() {
 export function list() { return LIST || []; }
 export function byId(id) { return list().find(b => b.id === id) || null; }
 
-/* The stored copy of a library book, matched on its folder name exactly. */
+/* The stored copy of a library book, matched on its folder name exactly.
+   A machine's book may be up twice - the CD's own section PDFs, and the
+   same book read into data with its exploded views. Where both are listed
+   the read one wins: same book, searchable, and a tenth of the download. */
 export function forFolder(folder) {
-  return list().find(b => b.kind === 'pdf' && b.folder === folder) || null;
+  const all = list().filter(b => b.folder === folder);
+  return all.find(b => b.kind !== 'pdf') || all.find(b => b.kind === 'pdf') || null;
 }
 /* The stored copy of an Epiroc book listed in config.js. */
 export function forRef(ref) {
@@ -511,6 +515,21 @@ const SHIM = '<script>(function(){'
   + 'o.tray.forEach(function(t){out.push([t.pn,t.q,t.nm||"",u])})}}catch(e){}});return out}'
   + 'function up(m){try{parent.postMessage(m,"*")}catch(e){}}'
   + 'function save(name,data){up({bsds:"save",filename:name,data:data})}'
+  /* A converted Epiroc book is one file and needs none of this. A Sandvik
+   * book is a page plus a few hundred drawings, far too much to inline, and
+   * the frame has no sign-in of its own - so it asks for one drawing at a
+   * time and the app fetches it through Storage. The page calls this when it
+   * has somewhere to put the picture; opened outside the app the function is
+   * not there and the book falls back to its own draw/ folder. */
+  + 'var wq={},wn=0;'
+  + 'window.bsdsFile=function(p){return new Promise(function(res,rej){'
+  + 'var id="f"+(++wn);wq[id]={res:res,rej:rej};up({bsds:"file",id:id,path:p});'
+  + 'setTimeout(function(){if(wq[id]){wq[id].rej(new Error("No answer fetching "+p));delete wq[id]}},90000)})};'
+  + 'addEventListener("message",function(e){if(e.source!==parent||!e.data)return;var d=e.data;'
+  + 'var w=d.id&&wq[d.id];if(!w)return;delete wq[d.id];'
+  + 'if(d.bsds==="file:ok"){try{w.res(URL.createObjectURL(new Blob([d.buf],{type:d.type||""})))}'
+  + 'catch(x){w.rej(x)}}'
+  + 'else if(d.bsds==="file:err"){w.rej(new Error(d.msg||"The drawing did not load."))}});'
   + 'window.claude={use:function(n){return n==="downloads"?Promise.resolve({save:function(o){'
   + 'save(o.filename,o.data);return Promise.resolve()}}):Promise.reject(new Error("none"))}};'
   + 'addEventListener("load",function(){try{if(window.XLSX&&XLSX.writeFile){'
@@ -544,13 +563,40 @@ export function trayLines(cols, rows) {
 }
 
 let FRAME = null;          /* the book frame on screen, the only one listened to */
+let FRAMEENTRY = null;     /* and which book it is, so it can only ask for its own */
 let onTray = null;
+
+/* A book asking for one of its own drawings.
+ *
+ * The path is checked against a pattern rather than trusted: the frame is
+ * sealed, but a book is still a page full of script, and "books/<id>/" +
+ * whatever it sent would otherwise let it read any object the signed-in
+ * user can. Only this book's draw/ folder, only a plain file name, and only
+ * for a book the stored list marks as carrying separate drawings.
+ */
+const DRAWPATH = /^draw\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+async function serveFile(d) {
+  const reply = m => { try { if (FRAME) FRAME.contentWindow.postMessage(m, '*'); } catch (e) {} };
+  const p = String(d.path || '');
+  if (!FRAMEENTRY || !FRAMEENTRY.assets || !DRAWPATH.test(p) || p.indexOf('..') > -1) {
+    reply({ bsds: 'file:err', id: d.id, msg: 'That file is not part of this book.' });
+    return;
+  }
+  try {
+    const b = await fromBucket('books/' + FRAMEENTRY.id + '/' + p);
+    reply({ bsds: 'file:ok', id: d.id, buf: await b.arrayBuffer(), type: b.type || '' });
+  } catch (e) {
+    reply({ bsds: 'file:err', id: d.id, msg: (e && e.message) || 'The drawing did not load.' });
+  }
+}
 
 if (typeof window !== 'undefined') {
   window.addEventListener('message', e => {
     if (!FRAME || e.source !== FRAME.contentWindow || !e.data) return;
     const d = e.data;
     if (d.bsds === 'tray' && onTray) { const f = onTray; onTray = null; f(d); return; }
+    if (d.bsds === 'file' && d.id) { serveFile(d); return; }
     if (d.bsds === 'save' && d.data) {
       const name = String(d.filename || 'Parts order.xlsx').replace(/[\\/:*?"<>|]+/g, ' ');
       const url = URL.createObjectURL(new Blob([d.data], {
@@ -575,6 +621,7 @@ export function askTray(timeout) {
 
 export function drawPage(host, html, title, ctx) {
   const o = ctx || {};
+  FRAMEENTRY = o.entry || null;
   /* a manual or schematic has no parts tray, so no button that would find none */
   const bar = o.noTray ? '' : '<div class="pagebar"><button type="button" class="btn primary" id="pgsend">'
     + 'Send this book’s list to a parts request</button>' + basketBar() + '</div>';

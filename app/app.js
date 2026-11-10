@@ -588,12 +588,15 @@ async function bookView(arg) {
     chrome(m.title, m.serial ? 's/n ' + m.serial : m.lib);
     if (entry.kind === 'html') {
       $('view').innerHTML = '<div class="wrap"><div class="empty">Opening the book… '
-        + esc(entry.mb) + ' MB the first time, then it is kept on this device.</div></div>';
+        + esc(entry.assets ? entry.pagemb || 1 : entry.mb)
+        + ' MB the first time, then it is kept on this device.'
+        + (entry.assets ? ' Drawings come down one at a time as you open them.' : '')
+        + '</div></div>';
       const html = await bstore.page(entry, m);
       if (route.view !== 'book' || route.arg !== arg) return;   /* they left */
       document.body.classList.add('framed');
       BOOK = { entry, m, idx: null, mid };
-      bstore.drawPage($('view'), html, m.title, { banner, noTray: !!entry.shelf });
+      bstore.drawPage($('view'), html, m.title, { banner, noTray: !!entry.shelf, entry });
       sitFrameUnderBar();
       return;
     }
